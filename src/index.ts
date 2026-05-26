@@ -72,7 +72,7 @@ Commands:
   allowly bundles apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
   allowly setup guide
-  allowly check --consent-id <id> --scope <scope> [--resource <resource>] [--runtime-env .env.local]
+  allowly check --authorization-id <id> --scope <scope> [--resource <resource>] [--runtime-env .env.local]
 
 Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
@@ -85,7 +85,7 @@ Typical agent flow:
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 
 Runtime check flow:
-  allowly check --consent-id cns_... --scope web.search --resource user:123 --runtime-env .env.local
+  allowly check --authorization-id auth_... --scope web.search --resource user:123 --runtime-env .env.local
 `;
 }
 
@@ -209,7 +209,7 @@ Setup order:
 1. Define scopes: individual permissions like web.search or lead.enrich.
 2. Define agent scope bundles: reusable groups of scopes per agent/use case.
 3. Create a runtime API key and store it in your app env or secret manager.
-4. Your app creates consents from bundle IDs and calls /v1/check before acting.
+4. Your app creates authorizations from bundle IDs and calls /v1/check before acting.
 
 Setup file format:
 {
@@ -241,11 +241,11 @@ Apply:
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 
 Runtime check:
-  allowly check --consent-id cns_... --scope web.search --resource user:123 --runtime-env .env.local
+  allowly check --authorization-id auth_... --scope web.search --resource user:123 --runtime-env .env.local
 
 Security boundary:
 - setup/login credentials configure scopes, bundles, and runtime keys.
-- runtime API keys create consents and call /v1/check.
+- runtime API keys create authorizations and call /v1/check.
 - the CLI does not sign receipts; the Allowly API signs receipts server-side.`);
 }
 
@@ -458,9 +458,9 @@ async function runtimeConfigFromArgs(args: string[]): Promise<RuntimeConfig> {
 }
 
 async function commandCheck(args: string[]): Promise<void> {
-  const consentId = option(args, "--consent-id");
+  const authorizationId = option(args, "--authorization-id");
   const scopes = [...options(args, "--scope"), ...(option(args, "--scopes") ?? "").split(",").map((s) => s.trim()).filter(Boolean)];
-  if (!consentId) throw new Error("Missing --consent-id");
+  if (!authorizationId) throw new Error("Missing --authorization-id");
   if (scopes.length === 0) throw new Error("Missing --scope");
   const resource = option(args, "--resource");
   const sessionId = option(args, "--session-id");
@@ -472,7 +472,7 @@ async function commandCheck(args: string[]): Promise<void> {
     "POST",
     `/v1/check${args.includes("--wait") ? "?wait=true" : ""}`,
     {
-      consent_id: consentId,
+      authorization_id: authorizationId,
       scopes,
       ...(resource ? { resource } : {}),
       ...(sessionId ? { session_id: sessionId } : {}),

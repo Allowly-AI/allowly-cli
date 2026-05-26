@@ -11,7 +11,7 @@ allowly scopes apply allowly.setup.json
 allowly bundles apply allowly.setup.json
 allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 allowly setup guide
-allowly check --consent-id cns_... --scope web.search --runtime-env .env.local
+allowly check --authorization-id auth_... --scope web.search --runtime-env .env.local
 ```
 
 ## Optional use-case seeds
