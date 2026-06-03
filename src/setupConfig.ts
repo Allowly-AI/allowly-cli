@@ -4,6 +4,8 @@ export interface ScopeConfig {
   name: string;
   description?: string;
   requires_confirm?: boolean;
+  requires_escalation?: boolean;
+  escalation_to?: string;
   constraints_schema?: Record<string, unknown>;
 }
 
@@ -13,6 +15,8 @@ export interface BundleConfig {
   description?: string;
   scopes: Array<{ name: string; constraints?: Record<string, unknown> }>;
   requires_confirm_for?: string[];
+  requires_escalation_for?: string[];
+  escalation_targets?: Record<string, string>;
   default_expiry_days?: number;
 }
 

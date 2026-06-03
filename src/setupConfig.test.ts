@@ -21,13 +21,34 @@ async function writeJson(value: unknown): Promise<string> {
 
 test("loadSetupConfig accepts scopes and agent scope bundles", async () => {
   const path = await writeJson({
-    scopes: [{ name: "email.read" }],
-    agent_scope_bundles: [{ id: "basic", agent_id: "agent", scopes: [{ name: "email.read" }] }],
+    scopes: [
+      { name: "email.read" },
+      { name: "candidate.delete", requires_escalation: true, escalation_to: "compliance" },
+    ],
+    agent_scope_bundles: [
+      {
+        id: "basic",
+        agent_id: "agent",
+        scopes: [{ name: "email.read" }, { name: "candidate.delete" }],
+        requires_escalation_for: ["candidate.delete"],
+        escalation_targets: { "candidate.delete": "compliance" },
+      },
+    ],
   });
 
   await expect(loadSetupConfig(path)).resolves.toMatchObject({
-    scopes: [{ name: "email.read" }],
-    agent_scope_bundles: [{ id: "basic", agent_id: "agent" }],
+    scopes: [
+      { name: "email.read" },
+      { name: "candidate.delete", requires_escalation: true, escalation_to: "compliance" },
+    ],
+    agent_scope_bundles: [
+      {
+        id: "basic",
+        agent_id: "agent",
+        requires_escalation_for: ["candidate.delete"],
+        escalation_targets: { "candidate.delete": "compliance" },
+      },
+    ],
   });
 });
 

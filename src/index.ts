@@ -230,6 +230,8 @@ Setup file format:
         { "name": "web.search" }
       ],
       "requires_confirm_for": [],
+      "requires_escalation_for": [],
+      "escalation_targets": {},
       "default_expiry_days": 90
     }
   ]
@@ -364,6 +366,8 @@ async function commandScopesApply(file: string | undefined): Promise<void> {
       name: scope.name,
       description: scope.description,
       requires_confirm: scope.requires_confirm ?? false,
+      requires_escalation: scope.requires_escalation ?? false,
+      escalation_to: scope.escalation_to,
       constraints_schema: scope.constraints_schema ?? {},
     });
     console.log(`created scope ${scope.name}`);
@@ -396,6 +400,8 @@ async function commandBundlesApply(file: string | undefined): Promise<void> {
       description: bundle.description,
       scopes: bundle.scopes.map((scope) => ({ name: scope.name, constraints: scope.constraints ?? {} })),
       requires_confirm_for: bundle.requires_confirm_for ?? [],
+      requires_escalation_for: bundle.requires_escalation_for ?? [],
+      escalation_targets: bundle.escalation_targets ?? {},
       default_expiry_days: bundle.default_expiry_days,
     });
     console.log(`created agent scope bundle ${bundle.id}`);
