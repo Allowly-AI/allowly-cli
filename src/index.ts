@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { DEFAULT_API_URL, readConfig, writeConfig } from "./config.js";
+import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, writeConfig } from "./config.js";
 import { AllowlyCliError, apiRequest } from "./http.js";
 import {
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -49,6 +49,7 @@ interface DeviceTokenResponse {
   status: "authorized";
   access_token: string;
   expires_at: string;
+  api_url?: string;
   workspace_id: string;
   workspace_name: string;
 }
@@ -62,7 +63,7 @@ Claude Code, or a script configure scopes, agent scope bundles, and runtime API 
 without dashboard or billing access.
 
 Commands:
-  allowly login [--api-url <url>] [--no-browser]
+  allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
   allowly status
   allowly init [--use-case email-agent|browser-agent|client-intelligence] [--file allowly.setup.json]
   allowly init --list-use-cases
@@ -78,7 +79,7 @@ Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
 
 Typical agent flow:
-  allowly login --api-url https://api.allowly.ai
+  allowly login
   allowly init
   allowly scopes apply allowly.setup.json
   allowly bundles apply allowly.setup.json
@@ -141,6 +142,7 @@ function openBrowser(url: string): boolean {
 async function commandLogin(args: string[]): Promise<void> {
   const setupToken = option(args, "--setup-token");
   const apiUrl = option(args, "--api-url") ?? DEFAULT_API_URL;
+  const appUrl = option(args, "--app-url") ?? DEFAULT_APP_URL;
   if (setupToken) {
     await writeConfig({ apiUrl, accessToken: setupToken });
     console.log(`Allowly CLI configured for ${apiUrl.replace(/\/$/, "")}`);
@@ -148,7 +150,7 @@ async function commandLogin(args: string[]): Promise<void> {
     return;
   }
 
-  const started = await requestJson<DeviceStartResponse>(apiUrl, "/v1/cli/device/start", {});
+  const started = await requestJson<DeviceStartResponse>(appUrl, "/v1/cli/device/start", {});
   const device = started.data;
   const shouldOpenBrowser = !args.includes("--no-browser");
   const opened = shouldOpenBrowser ? openBrowser(device.verification_uri_complete) : false;
@@ -162,7 +164,7 @@ async function commandLogin(args: string[]): Promise<void> {
   while (Date.now() < deadline) {
     await delay(pollIntervalMs);
     const tokenResponse = await requestJson<DeviceTokenResponse | { status: "pending"; interval?: number }>(
-      apiUrl,
+      appUrl,
       "/v1/cli/device/token",
       { device_code: device.device_code },
     );
@@ -172,14 +174,15 @@ async function commandLogin(args: string[]): Promise<void> {
       continue;
     }
     const authorized = tokenResponse.data as DeviceTokenResponse;
+    const configuredApiUrl = authorized.api_url ?? apiUrl;
     await writeConfig({
-      apiUrl,
+      apiUrl: configuredApiUrl,
       accessToken: authorized.access_token,
       expiresAt: authorized.expires_at,
       workspaceId: authorized.workspace_id,
       workspaceName: authorized.workspace_name,
     });
-    console.log(`Allowly CLI configured for ${authorized.workspace_name} (${apiUrl.replace(/\/$/, "")})`);
+    console.log(`Allowly CLI configured for ${authorized.workspace_name} (${configuredApiUrl.replace(/\/$/, "")})`);
     return;
   }
   throw new AllowlyCliError("CLI login code expired. Run `allowly login` again.", 401, "authorization_expired");

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export const DEFAULT_API_URL = "https://api.allowly.ai";
+export const DEFAULT_APP_URL = "https://app.allowly.ai";
 
 export interface CliConfig {
   apiUrl: string;

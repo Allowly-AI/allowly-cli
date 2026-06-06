@@ -5,7 +5,7 @@ Command-line setup tool for Allowly workspaces.
 Use it after a human creates an account, verifies email, and completes billing setup. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
 
 ```bash
-allowly login --api-url https://api.allowly.ai
+allowly login
 allowly init --use-case email-agent
 allowly scopes apply allowly.setup.json
 allowly bundles apply allowly.setup.json
@@ -13,6 +13,8 @@ allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 allowly setup guide
 allowly check --authorization-id auth_... --scope web.search --runtime-env .env.local
 ```
+
+`allowly login` talks to the dashboard app for browser approval and stores the public API URL returned by Allowly for setup calls. Use `--app-url` for local app development and `--api-url` only when you need to override the API URL written to the local CLI config.
 
 ## Optional use-case seeds
 
