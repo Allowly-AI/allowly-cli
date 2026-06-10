@@ -25,14 +25,20 @@ export interface AllowlySetupConfig {
   agent_scope_bundles: BundleConfig[];
 }
 
-export type SetupTemplateName = "email-agent" | "browser-agent" | "client-intelligence";
+export type SetupTemplateName = "email-agent" | "browser-agent" | "client-intelligence" | "hiring-disposition";
 
-export const SETUP_TEMPLATE_NAMES: SetupTemplateName[] = ["email-agent", "browser-agent", "client-intelligence"];
+export const SETUP_TEMPLATE_NAMES: SetupTemplateName[] = [
+  "email-agent",
+  "browser-agent",
+  "client-intelligence",
+  "hiring-disposition",
+];
 
 export const SETUP_TEMPLATE_DESCRIPTIONS: Record<SetupTemplateName, string> = {
   "email-agent": "Email assistant with read/send scopes and confirmation before sending.",
   "browser-agent": "Browser automation with confirmation before clicks and form submits.",
   "client-intelligence": "Sales and marketing research agent for web search, CRM/contact reads, lead enrichment, and confirmed outreach.",
+  "hiring-disposition": "Interview-feedback synthesizer with conditional human review on borderline drafts and every reject recommendation, plus compliance escalation on protected-class proxies.",
 };
 
 export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
@@ -108,6 +114,83 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         ],
         requires_confirm_for: ["browser.click", "browser.form.submit"],
         default_expiry_days: 30,
+      },
+    ],
+  },
+  "hiring-disposition": {
+    scopes: [
+      {
+        name: "hiring.synthesize_feedback",
+        description: "Draft an interview-feedback summary for the interviewer to review.",
+        requires_confirm: false,
+        constraints_schema: {
+          context_fields: {
+            confidence_score: "integer",
+            transcript_completeness: "integer",
+            rule_fired: "string",
+            decision_recommended: "string",
+          },
+        },
+      },
+      {
+        name: "hiring.recommend_disposition",
+        description: "Emit a hire/reject/no-recommendation signal to the ATS.",
+        requires_confirm: false,
+        constraints_schema: {
+          context_fields: {
+            confidence_score: "integer",
+            score: "integer",
+            score_delta: "integer",
+            panel_consensus: "boolean",
+            candidate_ai_opt_out: "boolean",
+            rule_fired: "string",
+            decision_recommended: "string",
+          },
+        },
+      },
+    ],
+    agent_scope_bundles: [
+      {
+        id: "hiring-disposition-basic",
+        agent_id: "hiring-feedback-synthesizer",
+        description: "Interview-feedback synthesizer with conditional review on borderline drafts and every reject recommendation. Demonstrates confirm_when, escalate_when, and policy_eval evidence.",
+        scopes: [
+          {
+            name: "hiring.synthesize_feedback",
+            constraints: {
+              confirm_when: [
+                { field: "confidence_score", lt: 70 },
+                { field: "transcript_completeness", lt: 80 },
+                { field: "rule_fired", in: ["halo_effect_detected", "narrative_inconsistency"] },
+              ],
+              escalate_when: [
+                { field: "rule_fired", in: ["demographic_proxy"] },
+              ],
+            },
+          },
+          {
+            name: "hiring.recommend_disposition",
+            constraints: {
+              confirm_when: [
+                { field: "decision_recommended", eq: "reject" },
+                { field: "confidence_score", lt: 85 },
+                { field: "score_delta", gte: 5 },
+                { field: "panel_consensus", eq: false },
+                { field: "candidate_ai_opt_out", eq: true },
+                { field: "rule_fired", in: ["employment_gap_factor", "availability_factor", "halo_effect_detected"] },
+              ],
+              escalate_when: [
+                { field: "rule_fired", in: ["demographic_proxy"] },
+                { field: "score", exists: false },
+              ],
+            },
+          },
+        ],
+        escalation_targets: {
+          "hiring.synthesize_feedback": "compliance@example.com",
+          "hiring.recommend_disposition": "compliance@example.com",
+        },
+        default_expiry_days: 90,
       },
     ],
   },

@@ -65,7 +65,7 @@ without dashboard or billing access.
 Commands:
   allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
   allowly status
-  allowly init [--use-case email-agent|browser-agent|client-intelligence] [--file allowly.setup.json]
+  allowly init [--use-case email-agent|browser-agent|client-intelligence|hiring-disposition] [--file allowly.setup.json]
   allowly init --list-use-cases
   allowly init --manual
   allowly init --ai
@@ -288,6 +288,7 @@ async function promptSetupChoice(): Promise<SetupTemplateName | "manual"> {
     { label: "Email assistant", value: "email-agent", description: SETUP_TEMPLATE_DESCRIPTIONS["email-agent"] },
     { label: "Browser automation", value: "browser-agent", description: SETUP_TEMPLATE_DESCRIPTIONS["browser-agent"] },
     { label: "Client intelligence", value: "client-intelligence", description: SETUP_TEMPLATE_DESCRIPTIONS["client-intelligence"] },
+    { label: "Hiring disposition", value: "hiring-disposition", description: SETUP_TEMPLATE_DESCRIPTIONS["hiring-disposition"] },
     { label: "I'll set it up myself", value: "manual", description: "Start empty and configure scopes/bundles yourself." },
   ];
 
@@ -299,12 +300,12 @@ async function promptSetupChoice(): Promise<SetupTemplateName | "manual"> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     while (true) {
-      const answer = (await rl.question("Choose 1-4: ")).trim();
+      const answer = (await rl.question(`Choose 1-${choices.length}: `)).trim();
       const index = Number(answer) - 1;
       if (Number.isInteger(index) && choices[index]) {
         return choices[index].value;
       }
-      console.log("Choose 1, 2, 3, or 4.");
+      console.log(`Choose 1-${choices.length}.`);
     }
   } finally {
     rl.close();

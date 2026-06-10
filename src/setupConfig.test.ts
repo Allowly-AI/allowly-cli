@@ -75,8 +75,13 @@ test("starter bundles are valid setup configs", async () => {
   }
 });
 
-test("starter bundles include client intelligence instead of support", () => {
-  expect(SETUP_TEMPLATE_NAMES).toEqual(["email-agent", "browser-agent", "client-intelligence"]);
+test("starter bundles include client intelligence and hiring disposition", () => {
+  expect(SETUP_TEMPLATE_NAMES).toEqual([
+    "email-agent",
+    "browser-agent",
+    "client-intelligence",
+    "hiring-disposition",
+  ]);
 
   const seed = getSetupTemplate("client-intelligence");
   expect(seed.scopes.map((scope) => scope.name)).toEqual([
@@ -89,4 +94,22 @@ test("starter bundles include client intelligence instead of support", () => {
     "email.send",
   ]);
   expect(seed.agent_scope_bundles[0].requires_confirm_for).toEqual(["lead.enrich", "email.send"]);
+});
+
+test("hiring-disposition template demonstrates confirm_when and escalate_when", () => {
+  const seed = getSetupTemplate("hiring-disposition");
+  expect(seed.scopes.map((scope) => scope.name)).toEqual([
+    "hiring.synthesize_feedback",
+    "hiring.recommend_disposition",
+  ]);
+
+  const bundle = seed.agent_scope_bundles[0];
+  const recommend = bundle.scopes.find((scope) => scope.name === "hiring.recommend_disposition");
+  const constraints = (recommend?.constraints ?? {}) as Record<string, unknown>;
+  const confirmWhen = constraints.confirm_when as Array<Record<string, unknown>>;
+  const escalateWhen = constraints.escalate_when as Array<Record<string, unknown>>;
+
+  expect(confirmWhen[0]).toEqual({ field: "decision_recommended", eq: "reject" });
+  expect(escalateWhen[0]).toEqual({ field: "rule_fired", in: ["demographic_proxy"] });
+  expect(bundle.escalation_targets?.["hiring.recommend_disposition"]).toBe("compliance@example.com");
 });
