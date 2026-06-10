@@ -65,7 +65,7 @@ without dashboard or billing access.
 Commands:
   allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
   allowly status
-  allowly init [--use-case email-agent|browser-agent|client-intelligence|hiring-disposition] [--file allowly.setup.json]
+  allowly init [--use-case email-agent|browser-agent|client-intelligence|hiring-disposition|mcp-tool-gating|no-code-automation] [--file allowly.setup.json]
   allowly init --list-use-cases
   allowly init --manual
   allowly init --ai
@@ -289,6 +289,8 @@ async function promptSetupChoice(): Promise<SetupTemplateName | "manual"> {
     { label: "Browser automation", value: "browser-agent", description: SETUP_TEMPLATE_DESCRIPTIONS["browser-agent"] },
     { label: "Client intelligence", value: "client-intelligence", description: SETUP_TEMPLATE_DESCRIPTIONS["client-intelligence"] },
     { label: "Hiring disposition", value: "hiring-disposition", description: SETUP_TEMPLATE_DESCRIPTIONS["hiring-disposition"] },
+    { label: "MCP tool gating", value: "mcp-tool-gating", description: SETUP_TEMPLATE_DESCRIPTIONS["mcp-tool-gating"] },
+    { label: "No-code automation", value: "no-code-automation", description: SETUP_TEMPLATE_DESCRIPTIONS["no-code-automation"] },
     { label: "I'll set it up myself", value: "manual", description: "Start empty and configure scopes/bundles yourself." },
   ];
 

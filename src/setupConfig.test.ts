@@ -75,12 +75,14 @@ test("starter bundles are valid setup configs", async () => {
   }
 });
 
-test("starter bundles include client intelligence and hiring disposition", () => {
+test("starter bundles include client intelligence, hiring, MCP, and no-code", () => {
   expect(SETUP_TEMPLATE_NAMES).toEqual([
     "email-agent",
     "browser-agent",
     "client-intelligence",
     "hiring-disposition",
+    "mcp-tool-gating",
+    "no-code-automation",
   ]);
 
   const seed = getSetupTemplate("client-intelligence");
@@ -94,6 +96,36 @@ test("starter bundles include client intelligence and hiring disposition", () =>
     "email.send",
   ]);
   expect(seed.agent_scope_bundles[0].requires_confirm_for).toEqual(["lead.enrich", "email.send"]);
+});
+
+test("mcp-tool-gating template covers read / write / destructive MCP tools", () => {
+  const seed = getSetupTemplate("mcp-tool-gating");
+  const bundle = seed.agent_scope_bundles[0];
+
+  expect(bundle.requires_escalation_for).toEqual([
+    "github.repo.delete",
+    "slack.channel.archive",
+    "drive.file.delete",
+    "secret.rotate",
+  ]);
+
+  const slackSend = bundle.scopes.find((scope) => scope.name === "slack.message.send");
+  const constraints = (slackSend?.constraints ?? {}) as Record<string, unknown>;
+  const confirmWhen = constraints.confirm_when as Array<Record<string, unknown>>;
+  expect(confirmWhen).toContainEqual({ field: "channel_visibility", eq: "public" });
+});
+
+test("no-code-automation template demonstrates conditional routing on email.send", () => {
+  const seed = getSetupTemplate("no-code-automation");
+  const bundle = seed.agent_scope_bundles[0];
+  const emailSend = bundle.scopes.find((scope) => scope.name === "email.send");
+  const constraints = (emailSend?.constraints ?? {}) as Record<string, unknown>;
+  const confirmWhen = constraints.confirm_when as Array<Record<string, unknown>>;
+  const escalateWhen = constraints.escalate_when as Array<Record<string, unknown>>;
+
+  expect(confirmWhen).toContainEqual({ field: "recipient_count", gte: 100 });
+  expect(confirmWhen).toContainEqual({ field: "prospect_region", in: ["EU", "UK"] });
+  expect(escalateWhen).toContainEqual({ field: "domain_suppression_match", eq: true });
 });
 
 test("hiring-disposition template demonstrates confirm_when and escalate_when", () => {
