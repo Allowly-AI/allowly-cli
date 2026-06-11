@@ -17,12 +17,12 @@ import {
   type SetupTemplateName,
 } from "./setupConfig.js";
 
-interface ScopeResponse {
+interface ActionResponse {
   items: Array<{ id: string; name: string }>;
 }
 
-interface BundleResponse {
-  items: Array<{ id: string }>;
+interface PolicyResponse {
+  items: Array<{ policy_id?: string }>;
 }
 
 interface RuntimeKeyResponse {
@@ -59,7 +59,7 @@ function usage(): string {
 
 Allowly is API-first after account, email, and billing setup.
 Run allowly login once, approve the CLI in your browser, then let Codex,
-Claude Code, or a script configure scopes, agent scope bundles, and runtime API keys
+Claude Code, or a script configure actions, policies, and runtime API keys
 without dashboard or billing access.
 
 Commands:
@@ -69,8 +69,8 @@ Commands:
   allowly init --list-use-cases
   allowly init --manual
   allowly init --ai
-  allowly scopes apply <allowly.setup.json>
-  allowly bundles apply <allowly.setup.json>
+  allowly actions apply <allowly.setup.json>
+  allowly policies apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
   allowly setup guide
   allowly check --authorization-id <id> --scope <scope> [--resource <resource>] [--runtime-env .env.local]
@@ -81,8 +81,8 @@ ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESC
 Typical agent flow:
   allowly login
   allowly init
-  allowly scopes apply allowly.setup.json
-  allowly bundles apply allowly.setup.json
+  allowly actions apply allowly.setup.json
+  allowly policies apply allowly.setup.json
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 
 Runtime check flow:
@@ -209,14 +209,14 @@ async function commandSetupGuide(): Promise<void> {
 ${workspace}
 
 Setup order:
-1. Define scopes: individual permissions like web.search or lead.enrich.
-2. Define agent scope bundles: reusable groups of scopes per agent/use case.
+1. Define actions: individual permissions like web.search or lead.enrich.
+2. Define policies: reusable groups of actions plus decision rules per agent/use case.
 3. Create a runtime API key and store it in your app env or secret manager.
-4. Your app creates authorizations from bundle IDs and calls /v1/check before acting.
+4. Your app creates authorizations from policy IDs and calls /v1/check before acting.
 
 Setup file format:
 {
-  "scopes": [
+  "actions": [
     {
       "name": "web.search",
       "description": "Search the public web.",
@@ -224,12 +224,12 @@ Setup file format:
       "constraints_schema": {}
     }
   ],
-  "agent_scope_bundles": [
+  "policies": [
     {
-      "id": "marketing_user_enrichment",
+      "policy_id": "marketing_user_enrichment",
       "agent_id": "marketing_user_enrichment",
       "description": "Enriches users with public marketing context.",
-      "scopes": [
+      "actions": [
         { "name": "web.search" }
       ],
       "requires_confirm_for": [],
@@ -241,15 +241,15 @@ Setup file format:
 }
 
 Apply:
-  allowly scopes apply allowly.setup.json
-  allowly bundles apply allowly.setup.json
+  allowly actions apply allowly.setup.json
+  allowly policies apply allowly.setup.json
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 
 Runtime check:
   allowly check --authorization-id auth_... --scope web.search --resource user:123 --runtime-env .env.local
 
 Security boundary:
-- setup/login credentials configure scopes, bundles, and runtime keys.
+- setup/login credentials configure actions, policies, and runtime keys.
 - runtime API keys create authorizations and call /v1/check.
 - the CLI does not sign receipts; the Allowly API signs receipts server-side.`);
 }
@@ -264,8 +264,8 @@ function listUseCases(): void {
 
 function printApplyNextSteps(file: string): void {
   console.log("Review it, then run:");
-  console.log(`  allowly scopes apply ${file}`);
-  console.log(`  allowly bundles apply ${file}`);
+  console.log(`  allowly actions apply ${file}`);
+  console.log(`  allowly policies apply ${file}`);
   console.log("  allowly keys create --write-env .env.local --var ALLOWLY_API_KEY");
   console.log("AI customization is coming soon.");
 }
@@ -273,8 +273,8 @@ function printApplyNextSteps(file: string): void {
 function printManualNextSteps(): void {
   console.log("Manual setup selected. No setup file was created and no workspace resources were changed.");
   console.log("Create your own allowly.setup.json, then run:");
-  console.log("  allowly scopes apply allowly.setup.json");
-  console.log("  allowly bundles apply allowly.setup.json");
+  console.log("  allowly actions apply allowly.setup.json");
+  console.log("  allowly policies apply allowly.setup.json");
   console.log("  allowly keys create --write-env .env.local --var ALLOWLY_API_KEY");
   console.log("Tip: use allowly init --list-use-cases to view optional use-case seeds.");
 }
@@ -291,7 +291,7 @@ async function promptSetupChoice(): Promise<SetupTemplateName | "manual"> {
     { label: "Hiring disposition", value: "hiring-disposition", description: SETUP_TEMPLATE_DESCRIPTIONS["hiring-disposition"] },
     { label: "MCP tool gating", value: "mcp-tool-gating", description: SETUP_TEMPLATE_DESCRIPTIONS["mcp-tool-gating"] },
     { label: "No-code automation", value: "no-code-automation", description: SETUP_TEMPLATE_DESCRIPTIONS["no-code-automation"] },
-    { label: "I'll set it up myself", value: "manual", description: "Start empty and configure scopes/bundles yourself." },
+    { label: "I'll set it up myself", value: "manual", description: "Start empty and configure actions and policies yourself." },
   ];
 
   console.log("Choose a use case to seed, or start empty:");
@@ -354,63 +354,67 @@ async function commandInit(args: string[]): Promise<void> {
   }
 }
 
-async function commandScopesApply(file: string | undefined): Promise<void> {
+async function commandActionsApply(file: string | undefined): Promise<void> {
   if (!file) throw new Error("Missing setup config path");
   const config = await readConfig();
   const setup = await loadSetupConfig(resolve(file));
-  const existing = await apiRequest<ScopeResponse>(config, "GET", "/v1/setup/scopes");
-  const existingNames = new Set(existing.items.map((scope) => scope.name));
+  const existing = await apiRequest<ActionResponse>(config, "GET", "/v1/setup/actions");
+  const existingNames = new Set(existing.items.map((action) => action.name));
 
   // Apply is intentionally idempotent: create missing resources, skip matches,
   // and never delete remote state unless a future explicit --prune is added.
-  for (const scope of setup.scopes) {
-    if (existingNames.has(scope.name)) {
-      console.log(`skip scope ${scope.name}`);
+  for (const action of setup.actions) {
+    if (existingNames.has(action.name)) {
+      console.log(`skip action ${action.name}`);
       continue;
     }
-    await apiRequest(config, "POST", "/v1/setup/scopes", {
-      name: scope.name,
-      description: scope.description,
-      requires_confirm: scope.requires_confirm ?? false,
-      requires_escalation: scope.requires_escalation ?? false,
-      escalation_to: scope.escalation_to,
-      constraints_schema: scope.constraints_schema ?? {},
+    await apiRequest(config, "POST", "/v1/setup/actions", {
+      name: action.name,
+      description: action.description,
+      requires_confirm: action.requires_confirm ?? false,
+      requires_escalation: action.requires_escalation ?? false,
+      escalation_to: action.escalation_to,
+      constraints_schema: action.constraints_schema ?? {},
     });
-    console.log(`created scope ${scope.name}`);
+    console.log(`created action ${action.name}`);
   }
 }
 
-async function commandBundlesApply(file: string | undefined): Promise<void> {
+async function commandPoliciesApply(file: string | undefined): Promise<void> {
   if (!file) throw new Error("Missing setup config path");
   const config = await readConfig();
   const setup = await loadSetupConfig(resolve(file));
-  const scopes = await apiRequest<ScopeResponse>(config, "GET", "/v1/setup/scopes");
-  const remoteScopeNames = new Set(scopes.items.map((scope) => scope.name));
-  for (const bundle of setup.agent_scope_bundles) {
-    const missing = bundle.scopes.map((scope) => scope.name).filter((name) => !remoteScopeNames.has(name));
+  const actions = await apiRequest<ActionResponse>(config, "GET", "/v1/setup/actions");
+  const remoteActionNames = new Set(actions.items.map((action) => action.name));
+  for (const policy of setup.policies) {
+    const missing = policy.actions.map((action) => action.name).filter((name) => !remoteActionNames.has(name));
     if (missing.length) {
-      throw new Error(`agent scope bundle ${bundle.id} references missing scopes: ${missing.join(", ")}. Run allowly scopes apply first.`);
+      throw new Error(`policy ${policy.policy_id} references missing actions: ${missing.join(", ")}. Run allowly actions apply first.`);
     }
   }
 
-  const existing = await apiRequest<BundleResponse>(config, "GET", "/v1/setup/agent-scope-bundles");
-  const existingIds = new Set(existing.items.map((bundle) => bundle.id));
-  for (const bundle of setup.agent_scope_bundles) {
-    if (existingIds.has(bundle.id)) {
-      console.log(`skip agent scope bundle ${bundle.id}`);
+  const existing = await apiRequest<PolicyResponse>(config, "GET", "/v1/setup/policies");
+  const existingIds = new Set(
+    existing.items
+      .map((policy) => policy.policy_id)
+      .filter((policyId): policyId is string => Boolean(policyId)),
+  );
+  for (const policy of setup.policies) {
+    if (existingIds.has(policy.policy_id)) {
+      console.log(`skip policy ${policy.policy_id}`);
       continue;
     }
-    await apiRequest(config, "POST", "/v1/setup/agent-scope-bundles", {
-      id: bundle.id,
-      agent_id: bundle.agent_id,
-      description: bundle.description,
-      scopes: bundle.scopes.map((scope) => ({ name: scope.name, constraints: scope.constraints ?? {} })),
-      requires_confirm_for: bundle.requires_confirm_for ?? [],
-      requires_escalation_for: bundle.requires_escalation_for ?? [],
-      escalation_targets: bundle.escalation_targets ?? {},
-      default_expiry_days: bundle.default_expiry_days,
+    await apiRequest(config, "POST", "/v1/setup/policies", {
+      policy_id: policy.policy_id,
+      agent_id: policy.agent_id,
+      description: policy.description,
+      actions: policy.actions.map((action) => ({ name: action.name, constraints: action.constraints ?? {} })),
+      requires_confirm_for: policy.requires_confirm_for ?? [],
+      requires_escalation_for: policy.requires_escalation_for ?? [],
+      escalation_targets: policy.escalation_targets ?? {},
+      default_expiry_days: policy.default_expiry_days,
     });
-    console.log(`created agent scope bundle ${bundle.id}`);
+    console.log(`created policy ${policy.policy_id}`);
   }
 }
 
@@ -526,8 +530,8 @@ async function main(argv: string[]): Promise<void> {
   if (command === "status") return commandStatus();
   if (command === "init") return commandInit(argv.slice(1));
   if (command === "setup" && subcommand === "guide") return commandSetupGuide();
-  if (command === "scopes" && subcommand === "apply") return commandScopesApply(action);
-  if (command === "bundles" && subcommand === "apply") return commandBundlesApply(action);
+  if (command === "actions" && subcommand === "apply") return commandActionsApply(action);
+  if (command === "policies" && subcommand === "apply") return commandPoliciesApply(action);
   if (command === "keys" && subcommand === "create") return commandKeysCreate([action, fileOrArg, ...rest].filter(Boolean));
   if (command === "check") return commandCheck(argv.slice(1));
   throw new Error(`Unknown command.\n\n${usage()}`);

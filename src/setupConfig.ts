@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-export interface ScopeConfig {
+export interface ActionConfig {
   name: string;
   description?: string;
   requires_confirm?: boolean;
@@ -9,11 +9,11 @@ export interface ScopeConfig {
   constraints_schema?: Record<string, unknown>;
 }
 
-export interface BundleConfig {
-  id: string;
+export interface PolicyConfig {
+  policy_id: string;
   agent_id: string;
   description?: string;
-  scopes: Array<{ name: string; constraints?: Record<string, unknown> }>;
+  actions: Array<{ name: string; constraints?: Record<string, unknown> }>;
   requires_confirm_for?: string[];
   requires_escalation_for?: string[];
   escalation_targets?: Record<string, string>;
@@ -21,8 +21,8 @@ export interface BundleConfig {
 }
 
 export interface AllowlySetupConfig {
-  scopes: ScopeConfig[];
-  agent_scope_bundles: BundleConfig[];
+  actions: ActionConfig[];
+  policies: PolicyConfig[];
 }
 
 export type SetupTemplateName =
@@ -43,7 +43,7 @@ export const SETUP_TEMPLATE_NAMES: SetupTemplateName[] = [
 ];
 
 export const SETUP_TEMPLATE_DESCRIPTIONS: Record<SetupTemplateName, string> = {
-  "email-agent": "Email assistant with read/send scopes and confirmation before sending.",
+  "email-agent": "Email assistant with read/send actions and confirmation before sending.",
   "browser-agent": "Browser automation with confirmation before clicks and form submits.",
   "client-intelligence": "Sales and marketing research agent for web search, CRM/contact reads, lead enrichment, and confirmed outreach.",
   "hiring-disposition": "Interview-feedback synthesizer with conditional human review on borderline drafts and every reject recommendation, plus compliance escalation on protected-class proxies.",
@@ -53,7 +53,7 @@ export const SETUP_TEMPLATE_DESCRIPTIONS: Record<SetupTemplateName, string> = {
 
 export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
   "email-agent": {
-    scopes: [
+    actions: [
       {
         name: "email.read",
         description: "Read user email metadata and message content.",
@@ -72,12 +72,12 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         },
       },
     ],
-    agent_scope_bundles: [
+    policies: [
       {
-        id: "email-agent-basic",
+        policy_id: "email-agent-basic",
         agent_id: "email-agent",
         description: "Basic email assistant permissions.",
-        scopes: [
+        actions: [
           { name: "email.read" },
           { name: "email.send", constraints: { max_per_day: 5 } },
         ],
@@ -87,7 +87,7 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
     ],
   },
   "browser-agent": {
-    scopes: [
+    actions: [
       {
         name: "browser.read",
         description: "Read page content, page metadata, and selected DOM text.",
@@ -112,12 +112,12 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         constraints_schema: {},
       },
     ],
-    agent_scope_bundles: [
+    policies: [
       {
-        id: "browser-agent-basic",
+        policy_id: "browser-agent-basic",
         agent_id: "browser-agent",
         description: "Browser automation with confirmation before side effects.",
-        scopes: [
+        actions: [
           { name: "browser.read" },
           { name: "browser.click", constraints: { allowed_domains: [] } },
           { name: "browser.form.submit" },
@@ -128,7 +128,7 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
     ],
   },
   "mcp-tool-gating": {
-    scopes: [
+    actions: [
       {
         name: "github.issue.read",
         description: "Read issue metadata and comments.",
@@ -206,12 +206,12 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         constraints_schema: {},
       },
     ],
-    agent_scope_bundles: [
+    policies: [
       {
-        id: "mcp-tool-gating-basic",
+        policy_id: "mcp-tool-gating-basic",
         agent_id: "mcp-agent",
         description: "Per-tool MCP gating: read autonomously, confirm writes, escalate destructive operations. Pair with AllowlyMCPMiddleware.",
-        scopes: [
+        actions: [
           { name: "github.issue.read" },
           {
             name: "github.pr.create",
@@ -262,7 +262,7 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
     ],
   },
   "no-code-automation": {
-    scopes: [
+    actions: [
       {
         name: "email.draft",
         description: "Draft outbound email for a no-code workflow to send later.",
@@ -323,12 +323,12 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         },
       },
     ],
-    agent_scope_bundles: [
+    policies: [
       {
-        id: "no-code-automation-basic",
+        policy_id: "no-code-automation-basic",
         agent_id: "no-code-workflow",
         description: "Guardrails for n8n / Zapier / Make: high-volume sends confirm, EU prospects honor consent, suspected duplicates escalate. Drop the Allowly Check node before any side-effect node and branch on the returned decision.",
-        scopes: [
+        actions: [
           { name: "email.draft" },
           {
             name: "email.send",
@@ -386,7 +386,7 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
     ],
   },
   "hiring-disposition": {
-    scopes: [
+    actions: [
       {
         name: "hiring.synthesize_feedback",
         description: "Draft an interview-feedback summary for the interviewer to review.",
@@ -417,12 +417,12 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         },
       },
     ],
-    agent_scope_bundles: [
+    policies: [
       {
-        id: "hiring-disposition-basic",
+        policy_id: "hiring-disposition-basic",
         agent_id: "hiring-feedback-synthesizer",
         description: "Interview-feedback synthesizer with conditional review on borderline drafts and every reject recommendation. Demonstrates confirm_when, escalate_when, and policy_eval evidence.",
-        scopes: [
+        actions: [
           {
             name: "hiring.synthesize_feedback",
             constraints: {
@@ -463,7 +463,7 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
     ],
   },
   "client-intelligence": {
-    scopes: [
+    actions: [
       {
         name: "web.search",
         description: "Search the public web for company, person, and market intelligence.",
@@ -517,12 +517,12 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         },
       },
     ],
-    agent_scope_bundles: [
+    policies: [
       {
-        id: "client-intelligence-basic",
+        policy_id: "client-intelligence-basic",
         agent_id: "client-intelligence",
         description: "Sales and marketing client-intelligence permissions with confirmation before enrichment and outreach.",
-        scopes: [
+        actions: [
           { name: "web.search" },
           { name: "web.page.read" },
           { name: "contact.profile.read" },
@@ -557,25 +557,25 @@ export async function writeSampleSetupConfig(
 
 export async function loadSetupConfig(path: string): Promise<AllowlySetupConfig> {
   const parsed = JSON.parse(await readFile(path, "utf8")) as Partial<AllowlySetupConfig>;
-  if (!Array.isArray(parsed.scopes)) throw new Error("allowly setup config must include a scopes array");
-  if (!Array.isArray(parsed.agent_scope_bundles)) {
-    throw new Error("allowly setup config must include an agent_scope_bundles array");
+  if (!Array.isArray(parsed.actions)) throw new Error("allowly setup config must include an actions array");
+  if (!Array.isArray(parsed.policies)) {
+    throw new Error("allowly setup config must include a policies array");
   }
-  for (const scope of parsed.scopes) {
-    if (!scope?.name) throw new Error("each scope must include name");
+  for (const action of parsed.actions) {
+    if (!action?.name) throw new Error("each action must include name");
   }
-  for (const bundle of parsed.agent_scope_bundles) {
-    if (!bundle?.id) throw new Error("each agent scope bundle must include id");
-    if (!bundle.agent_id) throw new Error(`agent scope bundle ${bundle.id} must include agent_id`);
-    if (!Array.isArray(bundle.scopes) || bundle.scopes.length === 0) {
-      throw new Error(`agent scope bundle ${bundle.id} must include at least one scope`);
+  for (const policy of parsed.policies) {
+    if (!policy?.policy_id) throw new Error("each policy must include policy_id");
+    if (!policy.agent_id) throw new Error(`policy ${policy.policy_id} must include agent_id`);
+    if (!Array.isArray(policy.actions) || policy.actions.length === 0) {
+      throw new Error(`policy ${policy.policy_id} must include at least one action`);
     }
-    for (const scope of bundle.scopes) {
-      if (!scope?.name) throw new Error(`agent scope bundle ${bundle.id} has a scope without name`);
+    for (const action of policy.actions) {
+      if (!action?.name) throw new Error(`policy ${policy.policy_id} has an action without name`);
     }
   }
   return {
-    scopes: parsed.scopes,
-    agent_scope_bundles: parsed.agent_scope_bundles,
+    actions: parsed.actions,
+    policies: parsed.policies,
   };
 }

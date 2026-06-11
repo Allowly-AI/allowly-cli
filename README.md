@@ -7,8 +7,8 @@ Use it after a human creates an account, verifies email, and completes billing s
 ```bash
 allowly login
 allowly init --use-case email-agent
-allowly scopes apply allowly.setup.json
-allowly bundles apply allowly.setup.json
+allowly actions apply allowly.setup.json
+allowly policies apply allowly.setup.json
 allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 allowly setup guide
 allowly check --authorization-id auth_... --scope web.search --runtime-env .env.local
@@ -27,9 +27,9 @@ allowly init --manual
 allowly init --ai
 ```
 
-Use-case seeds are optional. If you already know your permissions, create scopes first, then bundle them per agent.
+Use-case seeds are optional. If you already know your actions, create them first, then group them into policies per agent.
 
-CLI credentials can configure scopes, agent scope bundles, setup status, and runtime-key creation. They cannot call `/v1/check`, access billing, manage users, or change passwords.
+CLI credentials can configure actions, policies, setup status, and runtime-key creation. They cannot call `/v1/check`, access billing, manage users, or change passwords.
 
 Runtime API keys are shown once. Write them to local env files or a secret manager; do not paste them into logs, tickets, or chat transcripts.
 
