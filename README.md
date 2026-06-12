@@ -11,7 +11,7 @@ allowly actions apply allowly.setup.json
 allowly policies apply allowly.setup.json
 allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 allowly setup guide
-allowly check --authorization-id auth_... --scope web.search --runtime-env .env.local
+allowly check --authorization-id auth_... --action web.search --runtime-env .env.local
 ```
 
 `allowly login` talks to the dashboard app for browser approval and stores the public API URL returned by Allowly for setup calls. Use `--app-url` for local app development and `--api-url` only when you need to override the API URL written to the local CLI config.

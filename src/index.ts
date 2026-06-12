@@ -73,7 +73,7 @@ Commands:
   allowly policies apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
   allowly setup guide
-  allowly check --authorization-id <id> --scope <scope> [--resource <resource>] [--runtime-env .env.local]
+  allowly check --authorization-id <id> --action <action> [--resource <resource>] [--runtime-env .env.local]
 
 Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
@@ -86,7 +86,7 @@ Typical agent flow:
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 
 Runtime check flow:
-  allowly check --authorization-id auth_... --scope web.search --resource user:123 --runtime-env .env.local
+  allowly check --authorization-id auth_... --action web.search --resource user:123 --runtime-env .env.local
 `;
 }
 
@@ -246,7 +246,7 @@ Apply:
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 
 Runtime check:
-  allowly check --authorization-id auth_... --scope web.search --resource user:123 --runtime-env .env.local
+  allowly check --authorization-id auth_... --action web.search --resource user:123 --runtime-env .env.local
 
 Security boundary:
 - setup/login credentials configure actions, policies, and runtime keys.
@@ -475,9 +475,9 @@ async function runtimeConfigFromArgs(args: string[]): Promise<RuntimeConfig> {
 
 async function commandCheck(args: string[]): Promise<void> {
   const authorizationId = option(args, "--authorization-id");
-  const scopes = [...options(args, "--scope"), ...(option(args, "--scopes") ?? "").split(",").map((s) => s.trim()).filter(Boolean)];
+  const actions = [...options(args, "--action"), ...(option(args, "--actions") ?? "").split(",").map((s) => s.trim()).filter(Boolean)];
   if (!authorizationId) throw new Error("Missing --authorization-id");
-  if (scopes.length === 0) throw new Error("Missing --scope");
+  if (actions.length === 0) throw new Error("Missing --action");
   const resource = option(args, "--resource");
   const sessionId = option(args, "--session-id");
   const contextRaw = option(args, "--context");
@@ -489,7 +489,7 @@ async function commandCheck(args: string[]): Promise<void> {
     `/v1/check${args.includes("--wait") ? "?wait=true" : ""}`,
     {
       authorization_id: authorizationId,
-      scopes,
+      actions,
       ...(resource ? { resource } : {}),
       ...(sessionId ? { session_id: sessionId } : {}),
       context,
