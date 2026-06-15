@@ -5,6 +5,7 @@ export interface ActionConfig {
   description?: string;
   requires_confirm?: boolean;
   requires_escalation?: boolean;
+  requires_deny?: boolean;
   escalation_to?: string;
   constraints_schema?: Record<string, unknown>;
 }
@@ -16,6 +17,7 @@ export interface PolicyConfig {
   actions: Array<{ name: string; constraints?: Record<string, unknown> }>;
   requires_confirm_for?: string[];
   requires_escalation_for?: string[];
+  requires_deny_for?: string[];
   escalation_targets?: Record<string, string>;
   default_expiry_days?: number;
 }
@@ -25,34 +27,16 @@ export interface AllowlySetupConfig {
   policies: PolicyConfig[];
 }
 
-export type SetupTemplateName =
-  | "email-agent"
-  | "browser-agent"
-  | "client-intelligence"
-  | "hiring-disposition"
-  | "mcp-tool-gating"
-  | "no-code-automation";
+interface UseCaseSeed {
+  label: string;
+  description: string;
+  actions: ActionConfig[];
+}
 
-export const SETUP_TEMPLATE_NAMES: SetupTemplateName[] = [
-  "email-agent",
-  "browser-agent",
-  "client-intelligence",
-  "hiring-disposition",
-  "mcp-tool-gating",
-  "no-code-automation",
-];
-
-export const SETUP_TEMPLATE_DESCRIPTIONS: Record<SetupTemplateName, string> = {
-  "email-agent": "Email assistant with read/send actions and confirmation before sending.",
-  "browser-agent": "Browser automation with confirmation before clicks and form submits.",
-  "client-intelligence": "Sales and marketing research agent for web search, CRM/contact reads, lead enrichment, and confirmed outreach.",
-  "hiring-disposition": "Interview-feedback synthesizer with conditional human review on borderline drafts and every reject recommendation, plus compliance escalation on protected-class proxies.",
-  "mcp-tool-gating": "MCP tool gating for Claude/MCP agents: read tools allow autonomously, write tools confirm, destructive tools escalate.",
-  "no-code-automation": "Drop-the-Check-node guardrails for n8n / Zapier / Make: high-volume sends confirm, EU prospects honor consent, suspected duplicates escalate.",
-};
-
-export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
+const USE_CASE_SEEDS = {
   "email-agent": {
+    label: "Email assistant",
+    description: "Read and draft email, with confirmation before sending.",
     actions: [
       {
         name: "email.read",
@@ -72,21 +56,10 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         },
       },
     ],
-    policies: [
-      {
-        policy_id: "email-agent-basic",
-        agent_id: "email-agent",
-        description: "Basic email assistant permissions.",
-        actions: [
-          { name: "email.read" },
-          { name: "email.send", constraints: { max_per_day: 5 } },
-        ],
-        requires_confirm_for: ["email.send"],
-        default_expiry_days: 90,
-      },
-    ],
   },
   "browser-agent": {
+    label: "Browser automation",
+    description: "Read pages, click controls, and submit forms with confirmation before side effects.",
     actions: [
       {
         name: "browser.read",
@@ -108,361 +81,15 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
       {
         name: "browser.form.submit",
         description: "Submit forms that may change user data.",
-        requires_confirm: true,
+        requires_confirm: false,
+        requires_deny: true,
         constraints_schema: {},
-      },
-    ],
-    policies: [
-      {
-        policy_id: "browser-agent-basic",
-        agent_id: "browser-agent",
-        description: "Browser automation with confirmation before side effects.",
-        actions: [
-          { name: "browser.read" },
-          { name: "browser.click", constraints: { allowed_domains: [] } },
-          { name: "browser.form.submit" },
-        ],
-        requires_confirm_for: ["browser.click", "browser.form.submit"],
-        default_expiry_days: 30,
-      },
-    ],
-  },
-  "mcp-tool-gating": {
-    actions: [
-      {
-        name: "github.issue.read",
-        description: "Read issue metadata and comments.",
-        requires_confirm: false,
-        constraints_schema: {},
-      },
-      {
-        name: "github.pr.create",
-        description: "Open a pull request against a repository.",
-        requires_confirm: true,
-        constraints_schema: {
-          context_fields: {
-            target_branch: "string",
-            target_visibility: "string",
-          },
-        },
-      },
-      {
-        name: "github.repo.delete",
-        description: "Delete a GitHub repository.",
-        requires_escalation: true,
-        escalation_to: "security@example.com",
-        constraints_schema: {},
-      },
-      {
-        name: "slack.message.read",
-        description: "Read Slack channel and DM messages.",
-        requires_confirm: false,
-        constraints_schema: {},
-      },
-      {
-        name: "slack.message.send",
-        description: "Post a message to a Slack channel or DM.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            channel_id: "string",
-            channel_visibility: "string",
-            channel_member_count: "integer",
-            mentions_external: "boolean",
-          },
-        },
-      },
-      {
-        name: "slack.channel.archive",
-        description: "Archive a Slack channel.",
-        requires_escalation: true,
-        escalation_to: "security@example.com",
-        constraints_schema: {},
-      },
-      {
-        name: "drive.file.read",
-        description: "Read a Drive file.",
-        requires_confirm: false,
-        constraints_schema: {},
-      },
-      {
-        name: "drive.file.write",
-        description: "Create or edit a Drive file.",
-        requires_confirm: true,
-        constraints_schema: {},
-      },
-      {
-        name: "drive.file.delete",
-        description: "Delete a Drive file.",
-        requires_escalation: true,
-        escalation_to: "security@example.com",
-        constraints_schema: {},
-      },
-      {
-        name: "secret.rotate",
-        description: "Rotate a managed secret.",
-        requires_escalation: true,
-        escalation_to: "security@example.com",
-        constraints_schema: {},
-      },
-    ],
-    policies: [
-      {
-        policy_id: "mcp-tool-gating-basic",
-        agent_id: "mcp-agent",
-        description: "Per-tool MCP gating: read autonomously, confirm writes, escalate destructive operations. Pair with AllowlyMCPMiddleware.",
-        actions: [
-          { name: "github.issue.read" },
-          {
-            name: "github.pr.create",
-            constraints: {
-              confirm_when: [
-                { field: "target_branch", eq: "main" },
-                { field: "target_visibility", eq: "public" },
-              ],
-            },
-          },
-          { name: "github.repo.delete" },
-          { name: "slack.message.read" },
-          {
-            name: "slack.message.send",
-            constraints: {
-              confirm_when: [
-                { field: "channel_visibility", eq: "public" },
-                { field: "channel_member_count", gte: 50 },
-                { field: "mentions_external", eq: true },
-              ],
-              escalate_when: [
-                { field: "channel_id", in: ["security-incidents", "all-hands"] },
-              ],
-            },
-          },
-          { name: "slack.channel.archive" },
-          { name: "drive.file.read" },
-          { name: "drive.file.write" },
-          { name: "drive.file.delete" },
-          { name: "secret.rotate" },
-        ],
-        requires_confirm_for: ["drive.file.write"],
-        requires_escalation_for: [
-          "github.repo.delete",
-          "slack.channel.archive",
-          "drive.file.delete",
-          "secret.rotate",
-        ],
-        escalation_targets: {
-          "github.repo.delete": "security@example.com",
-          "slack.channel.archive": "security@example.com",
-          "drive.file.delete": "security@example.com",
-          "secret.rotate": "security@example.com",
-          "slack.message.send": "security@example.com",
-        },
-        default_expiry_days: 30,
-      },
-    ],
-  },
-  "no-code-automation": {
-    actions: [
-      {
-        name: "email.draft",
-        description: "Draft outbound email for a no-code workflow to send later.",
-        requires_confirm: false,
-        constraints_schema: {},
-      },
-      {
-        name: "email.send",
-        description: "Send outbound email from a no-code workflow.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            recipient_count: "integer",
-            prospect_region: "string",
-            campaign_type: "string",
-            mentions_pricing: "boolean",
-            domain_suppression_match: "boolean",
-          },
-        },
-      },
-      {
-        name: "crm.contact.update",
-        description: "Update fields on a CRM contact record.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            looks_like_duplicate: "boolean",
-            overwrites_human_edit: "boolean",
-          },
-        },
-      },
-      {
-        name: "crm.opportunity.create",
-        description: "Create a CRM opportunity record.",
-        requires_confirm: false,
-        constraints_schema: {},
-      },
-      {
-        name: "calendar.event.create",
-        description: "Create a calendar event and invite attendees.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            attendee_count: "integer",
-            is_external: "boolean",
-          },
-        },
-      },
-      {
-        name: "slack.message.post",
-        description: "Post a Slack message from a no-code workflow.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            channel_visibility: "string",
-            channel_member_count: "integer",
-          },
-        },
-      },
-    ],
-    policies: [
-      {
-        policy_id: "no-code-automation-basic",
-        agent_id: "no-code-workflow",
-        description: "Guardrails for n8n / Zapier / Make: high-volume sends confirm, EU prospects honor consent, suspected duplicates escalate. Drop the Allowly Check node before any side-effect node and branch on the returned decision.",
-        actions: [
-          { name: "email.draft" },
-          {
-            name: "email.send",
-            constraints: {
-              max_per_day: 200,
-              confirm_when: [
-                { field: "recipient_count", gte: 100 },
-                { field: "prospect_region", in: ["EU", "UK"] },
-                { field: "campaign_type", eq: "cold_outreach" },
-                { field: "mentions_pricing", eq: true },
-              ],
-              escalate_when: [
-                { field: "domain_suppression_match", eq: true },
-                { field: "recipient_count", gte: 1000 },
-              ],
-            },
-          },
-          {
-            name: "crm.contact.update",
-            constraints: {
-              confirm_when: [
-                { field: "looks_like_duplicate", eq: true },
-              ],
-              escalate_when: [
-                { field: "overwrites_human_edit", eq: true },
-              ],
-            },
-          },
-          { name: "crm.opportunity.create" },
-          {
-            name: "calendar.event.create",
-            constraints: {
-              confirm_when: [
-                { field: "attendee_count", gte: 20 },
-                { field: "is_external", eq: true },
-              ],
-            },
-          },
-          {
-            name: "slack.message.post",
-            constraints: {
-              confirm_when: [
-                { field: "channel_visibility", eq: "public" },
-                { field: "channel_member_count", gte: 100 },
-              ],
-            },
-          },
-        ],
-        escalation_targets: {
-          "email.send": "ops@example.com",
-          "crm.contact.update": "ops@example.com",
-        },
-        default_expiry_days: 90,
-      },
-    ],
-  },
-  "hiring-disposition": {
-    actions: [
-      {
-        name: "hiring.synthesize_feedback",
-        description: "Draft an interview-feedback summary for the interviewer to review.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            confidence_score: "integer",
-            transcript_completeness: "integer",
-            rule_fired: "string",
-            decision_recommended: "string",
-          },
-        },
-      },
-      {
-        name: "hiring.recommend_disposition",
-        description: "Emit a hire/reject/no-recommendation signal to the ATS.",
-        requires_confirm: false,
-        constraints_schema: {
-          context_fields: {
-            confidence_score: "integer",
-            score: "integer",
-            score_delta: "integer",
-            panel_consensus: "boolean",
-            candidate_ai_opt_out: "boolean",
-            rule_fired: "string",
-            decision_recommended: "string",
-          },
-        },
-      },
-    ],
-    policies: [
-      {
-        policy_id: "hiring-disposition-basic",
-        agent_id: "hiring-feedback-synthesizer",
-        description: "Interview-feedback synthesizer with conditional review on borderline drafts and every reject recommendation. Demonstrates confirm_when, escalate_when, and policy_eval evidence.",
-        actions: [
-          {
-            name: "hiring.synthesize_feedback",
-            constraints: {
-              confirm_when: [
-                { field: "confidence_score", lt: 70 },
-                { field: "transcript_completeness", lt: 80 },
-                { field: "rule_fired", in: ["halo_effect_detected", "narrative_inconsistency"] },
-              ],
-              escalate_when: [
-                { field: "rule_fired", in: ["demographic_proxy"] },
-              ],
-            },
-          },
-          {
-            name: "hiring.recommend_disposition",
-            constraints: {
-              confirm_when: [
-                { field: "decision_recommended", eq: "reject" },
-                { field: "confidence_score", lt: 85 },
-                { field: "score_delta", gte: 5 },
-                { field: "panel_consensus", eq: false },
-                { field: "candidate_ai_opt_out", eq: true },
-                { field: "rule_fired", in: ["employment_gap_factor", "availability_factor", "halo_effect_detected"] },
-              ],
-              escalate_when: [
-                { field: "rule_fired", in: ["demographic_proxy"] },
-                { field: "score", exists: false },
-              ],
-            },
-          },
-        ],
-        escalation_targets: {
-          "hiring.synthesize_feedback": "compliance@example.com",
-          "hiring.recommend_disposition": "compliance@example.com",
-        },
-        default_expiry_days: 90,
       },
     ],
   },
   "client-intelligence": {
+    label: "Client intelligence",
+    description: "Sales and marketing research with contact/CRM reads, lead enrichment, and confirmed outreach.",
     actions: [
       {
         name: "web.search",
@@ -517,40 +144,197 @@ export const SETUP_TEMPLATES: Record<SetupTemplateName, AllowlySetupConfig> = {
         },
       },
     ],
-    policies: [
+  },
+  "hr-ops": {
+    label: "HR and hiring",
+    description: "Candidate review, recruiting ops, and sensitive employment actions with confirmation and escalation paths.",
+    actions: [
       {
-        policy_id: "client-intelligence-basic",
-        agent_id: "client-intelligence",
-        description: "Sales and marketing client-intelligence permissions with confirmation before enrichment and outreach.",
-        actions: [
-          { name: "web.search" },
-          { name: "web.page.read" },
-          { name: "contact.profile.read" },
-          { name: "crm.account.read" },
-          { name: "lead.enrich", constraints: { allowed_fields: [] } },
-          { name: "email.draft" },
-          { name: "email.send", constraints: { max_per_day: 25 } },
-        ],
-        requires_confirm_for: ["lead.enrich", "email.send"],
-        default_expiry_days: 90,
+        name: "candidate.profile.read",
+        description: "Read candidate profile, resume, and application data for recruiting review.",
+        requires_confirm: false,
+        constraints_schema: {},
+      },
+      {
+        name: "candidate.score.update",
+        description: "Write screening scores and recruiter notes back to the hiring system.",
+        requires_confirm: true,
+        constraints_schema: {
+          context_fields: {
+            score: "integer",
+            score_delta: "integer",
+            rule_fired: "list",
+          },
+        },
+      },
+      {
+        name: "candidate.reject",
+        description: "Reject or archive an applicant in the ATS.",
+        requires_confirm: false,
+        requires_escalation: true,
+        escalation_to: "hr_approver",
+        constraints_schema: {
+          context_fields: {
+            opt_out: "boolean",
+            score: "integer",
+            score_delta: "integer",
+            rule_fired: "list",
+          },
+        },
+      },
+      {
+        name: "candidate.outreach.send",
+        description: "Send recruiting outreach or scheduling messages to candidates.",
+        requires_confirm: true,
+        constraints_schema: {
+          context_fields: {
+            opt_out: "boolean",
+            template_name: "string",
+          },
+        },
       },
     ],
   },
-};
+  "mcp-guardrails": {
+    label: "MCP guardrails",
+    description: "Tool-call guardrails for MCP agents, with escalation available on Pro for high-risk tool actions.",
+    actions: [
+      {
+        name: "mcp.tool.read",
+        description: "Read tool metadata, arguments, and non-mutating tool results.",
+        requires_confirm: false,
+        constraints_schema: {},
+      },
+      {
+        name: "mcp.tool.call",
+        description: "Approve ordinary mutating MCP tool calls before the tool runs.",
+        requires_confirm: true,
+        constraints_schema: {
+          context_fields: {
+            tool_name: "string",
+            estimated_cost_micros: "integer",
+            resource: "string",
+          },
+        },
+      },
+      {
+        name: "mcp.tool.call.sensitive",
+        description: "Gate high-risk MCP tool calls such as deletes, credential changes, or external publishing.",
+        requires_confirm: false,
+        requires_escalation: true,
+        escalation_to: "security_approver",
+        constraints_schema: {
+          context_fields: {
+            tool_name: "string",
+            resource: "string",
+            estimated_cost_micros: "integer",
+            action_type: "string",
+          },
+        },
+      },
+    ],
+  },
+  "no-code-automation": {
+    label: "No-code automation",
+    description: "n8n, Zapier, and Make workflows with explicit checks before record writes, sends, and irreversible steps.",
+    actions: [
+      {
+        name: "workflow.record.read",
+        description: "Read rows, records, and prior step outputs inside the workflow.",
+        requires_confirm: false,
+        constraints_schema: {},
+      },
+      {
+        name: "workflow.record.update",
+        description: "Create or update records in downstream systems from a workflow step.",
+        requires_confirm: true,
+        constraints_schema: {
+          context_fields: {
+            platform: "string",
+            resource: "string",
+            estimated_cost_micros: "integer",
+          },
+        },
+      },
+      {
+        name: "workflow.message.send",
+        description: "Send emails, Slack messages, or CRM outreach from a no-code workflow.",
+        requires_confirm: true,
+        constraints_schema: {
+          context_fields: {
+            platform: "string",
+            recipient_type: "string",
+            template_name: "string",
+          },
+        },
+      },
+      {
+        name: "workflow.irreversible.execute",
+        description: "Run destructive or externally visible workflow steps such as deletes, status flips, or production publishes.",
+        requires_confirm: false,
+        requires_deny: true,
+        constraints_schema: {
+          context_fields: {
+            platform: "string",
+            action_type: "string",
+            resource: "string",
+          },
+        },
+      },
+    ],
+  },
+} satisfies Record<string, UseCaseSeed>;
 
-export const SAMPLE_SETUP_CONFIG: AllowlySetupConfig = SETUP_TEMPLATES["email-agent"];
+export type SetupTemplateName = keyof typeof USE_CASE_SEEDS;
+
+export const SETUP_TEMPLATE_NAMES = Object.keys(USE_CASE_SEEDS) as SetupTemplateName[];
+
+export const SETUP_TEMPLATE_LABELS = Object.fromEntries(
+  SETUP_TEMPLATE_NAMES.map((name) => [name, USE_CASE_SEEDS[name].label]),
+) as Record<SetupTemplateName, string>;
+
+export const SETUP_TEMPLATE_DESCRIPTIONS = Object.fromEntries(
+  SETUP_TEMPLATE_NAMES.map((name) => [name, USE_CASE_SEEDS[name].description]),
+) as Record<SetupTemplateName, string>;
+
+function generatedPolicy(name: SetupTemplateName, seed: UseCaseSeed): PolicyConfig {
+  const requires_confirm_for = seed.actions.filter((action) => action.requires_confirm).map((action) => action.name);
+  const requires_escalation_for = seed.actions.filter((action) => action.requires_escalation).map((action) => action.name);
+  const requires_deny_for = seed.actions.filter((action) => action.requires_deny).map((action) => action.name);
+  const escalation_targets = Object.fromEntries(
+    seed.actions
+      .filter((action) => action.requires_escalation && action.escalation_to)
+      .map((action) => [action.name, action.escalation_to as string]),
+  );
+
+  return {
+    policy_id: `${name}-basic`,
+    agent_id: name,
+    description: seed.description,
+    actions: seed.actions.map((action) => ({ name: action.name })),
+    requires_confirm_for,
+    requires_escalation_for,
+    requires_deny_for,
+    escalation_targets,
+    default_expiry_days: 365,
+  };
+}
 
 export function getSetupTemplate(name: SetupTemplateName): AllowlySetupConfig {
-  return SETUP_TEMPLATES[name];
+  const seed = USE_CASE_SEEDS[name];
+  return {
+    actions: seed.actions,
+    policies: [generatedPolicy(name, seed)],
+  };
 }
 
 export function isSetupTemplateName(value: string): value is SetupTemplateName {
-  return SETUP_TEMPLATE_NAMES.includes(value as SetupTemplateName);
+  return value in USE_CASE_SEEDS;
 }
 
 export async function writeSampleSetupConfig(
   path = "allowly.setup.json",
-  seed: AllowlySetupConfig = SAMPLE_SETUP_CONFIG,
+  seed: AllowlySetupConfig = getSetupTemplate("email-agent"),
 ): Promise<void> {
   await writeFile(path, JSON.stringify(seed, null, 2) + "\n", { flag: "wx" });
 }

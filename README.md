@@ -23,8 +23,10 @@ allowly init --list-use-cases
 allowly init --use-case email-agent
 allowly init --use-case browser-agent
 allowly init --use-case client-intelligence
+allowly init --use-case hr-ops
+allowly init --use-case mcp-guardrails
+allowly init --use-case no-code-automation
 allowly init --manual
-allowly init --ai
 ```
 
 Use-case seeds are optional. If you already know your actions, create them first, then group them into policies per agent.

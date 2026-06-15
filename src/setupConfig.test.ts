@@ -24,13 +24,15 @@ test("loadSetupConfig accepts actions and policies", async () => {
     actions: [
       { name: "email.read" },
       { name: "candidate.delete", requires_escalation: true, escalation_to: "compliance" },
+      { name: "record.delete", requires_deny: true },
     ],
     policies: [
       {
         policy_id: "basic",
         agent_id: "agent",
-        actions: [{ name: "email.read" }, { name: "candidate.delete" }],
+        actions: [{ name: "email.read" }, { name: "candidate.delete" }, { name: "record.delete" }],
         requires_escalation_for: ["candidate.delete"],
+        requires_deny_for: ["record.delete"],
         escalation_targets: { "candidate.delete": "compliance" },
       },
     ],
@@ -40,12 +42,14 @@ test("loadSetupConfig accepts actions and policies", async () => {
     actions: [
       { name: "email.read" },
       { name: "candidate.delete", requires_escalation: true, escalation_to: "compliance" },
+      { name: "record.delete", requires_deny: true },
     ],
     policies: [
       {
         policy_id: "basic",
         agent_id: "agent",
         requires_escalation_for: ["candidate.delete"],
+        requires_deny_for: ["record.delete"],
         escalation_targets: { "candidate.delete": "compliance" },
       },
     ],
@@ -80,8 +84,8 @@ test("starter policies include client intelligence, hiring, MCP, and no-code", (
     "email-agent",
     "browser-agent",
     "client-intelligence",
-    "hiring-disposition",
-    "mcp-tool-gating",
+    "hr-ops",
+    "mcp-guardrails",
     "no-code-automation",
   ]);
 
@@ -98,50 +102,48 @@ test("starter policies include client intelligence, hiring, MCP, and no-code", (
   expect(seed.policies[0].requires_confirm_for).toEqual(["lead.enrich", "email.send"]);
 });
 
-test("mcp-tool-gating template covers read / write / destructive MCP tools", () => {
-  const seed = getSetupTemplate("mcp-tool-gating");
+test("generated browser policy confirms clicks and denies form submits", () => {
+  const seed = getSetupTemplate("browser-agent");
   const policy = seed.policies[0];
 
-  expect(policy.requires_escalation_for).toEqual([
-    "github.repo.delete",
-    "slack.channel.archive",
-    "drive.file.delete",
-    "secret.rotate",
-  ]);
-
-  const slackSend = policy.actions.find((action) => action.name === "slack.message.send");
-  const constraints = (slackSend?.constraints ?? {}) as Record<string, unknown>;
-  const confirmWhen = constraints.confirm_when as Array<Record<string, unknown>>;
-  expect(confirmWhen).toContainEqual({ field: "channel_visibility", eq: "public" });
+  expect(policy.requires_confirm_for).toEqual(["browser.click"]);
+  expect(policy.requires_deny_for).toEqual(["browser.form.submit"]);
+  expect(policy.default_expiry_days).toBe(365);
 });
 
-test("no-code-automation template demonstrates conditional routing on email.send", () => {
+test("hr-ops template escalates candidate rejection", () => {
+  const seed = getSetupTemplate("hr-ops");
+  const policy = seed.policies[0];
+
+  expect(seed.actions.map((action) => action.name)).toEqual([
+    "candidate.profile.read",
+    "candidate.score.update",
+    "candidate.reject",
+    "candidate.outreach.send",
+  ]);
+  expect(policy.requires_confirm_for).toEqual(["candidate.score.update", "candidate.outreach.send"]);
+  expect(policy.requires_escalation_for).toEqual(["candidate.reject"]);
+  expect(policy.escalation_targets?.["candidate.reject"]).toBe("hr_approver");
+});
+
+test("mcp-guardrails template escalates sensitive tool calls", () => {
+  const seed = getSetupTemplate("mcp-guardrails");
+  const policy = seed.policies[0];
+
+  expect(seed.actions.map((action) => action.name)).toEqual([
+    "mcp.tool.read",
+    "mcp.tool.call",
+    "mcp.tool.call.sensitive",
+  ]);
+  expect(policy.requires_confirm_for).toEqual(["mcp.tool.call"]);
+  expect(policy.requires_escalation_for).toEqual(["mcp.tool.call.sensitive"]);
+  expect(policy.escalation_targets?.["mcp.tool.call.sensitive"]).toBe("security_approver");
+});
+
+test("no-code-automation generated policy denies irreversible workflow steps", () => {
   const seed = getSetupTemplate("no-code-automation");
   const policy = seed.policies[0];
-  const emailSend = policy.actions.find((action) => action.name === "email.send");
-  const constraints = (emailSend?.constraints ?? {}) as Record<string, unknown>;
-  const confirmWhen = constraints.confirm_when as Array<Record<string, unknown>>;
-  const escalateWhen = constraints.escalate_when as Array<Record<string, unknown>>;
 
-  expect(confirmWhen).toContainEqual({ field: "recipient_count", gte: 100 });
-  expect(confirmWhen).toContainEqual({ field: "prospect_region", in: ["EU", "UK"] });
-  expect(escalateWhen).toContainEqual({ field: "domain_suppression_match", eq: true });
-});
-
-test("hiring-disposition template demonstrates confirm_when and escalate_when", () => {
-  const seed = getSetupTemplate("hiring-disposition");
-  expect(seed.actions.map((action) => action.name)).toEqual([
-    "hiring.synthesize_feedback",
-    "hiring.recommend_disposition",
-  ]);
-
-  const policy = seed.policies[0];
-  const recommend = policy.actions.find((action) => action.name === "hiring.recommend_disposition");
-  const constraints = (recommend?.constraints ?? {}) as Record<string, unknown>;
-  const confirmWhen = constraints.confirm_when as Array<Record<string, unknown>>;
-  const escalateWhen = constraints.escalate_when as Array<Record<string, unknown>>;
-
-  expect(confirmWhen[0]).toEqual({ field: "decision_recommended", eq: "reject" });
-  expect(escalateWhen[0]).toEqual({ field: "rule_fired", in: ["demographic_proxy"] });
-  expect(policy.escalation_targets?.["hiring.recommend_disposition"]).toBe("compliance@example.com");
+  expect(policy.requires_confirm_for).toEqual(["workflow.record.update", "workflow.message.send"]);
+  expect(policy.requires_deny_for).toEqual(["workflow.irreversible.execute"]);
 });

@@ -9,6 +9,7 @@ import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, writeConfig } from "./con
 import { AllowlyCliError, apiRequest } from "./http.js";
 import {
   SETUP_TEMPLATE_DESCRIPTIONS,
+  SETUP_TEMPLATE_LABELS,
   SETUP_TEMPLATE_NAMES,
   getSetupTemplate,
   isSetupTemplateName,
@@ -65,10 +66,9 @@ without dashboard or billing access.
 Commands:
   allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
   allowly status
-  allowly init [--use-case email-agent|browser-agent|client-intelligence|hiring-disposition|mcp-tool-gating|no-code-automation] [--file allowly.setup.json]
+  allowly init [--use-case ${SETUP_TEMPLATE_NAMES.join("|")}] [--file allowly.setup.json]
   allowly init --list-use-cases
   allowly init --manual
-  allowly init --ai
   allowly actions apply <allowly.setup.json>
   allowly policies apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
@@ -234,6 +234,7 @@ Setup file format:
       ],
       "requires_confirm_for": [],
       "requires_escalation_for": [],
+      "requires_deny_for": [],
       "escalation_targets": {},
       "default_expiry_days": 90
     }
@@ -259,7 +260,6 @@ function listUseCases(): void {
     console.log(`${name}: ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`);
   }
   console.log("manual: I'll set it up myself");
-  console.log("ai: AI-customized use-case seeds are coming soon");
 }
 
 function printApplyNextSteps(file: string): void {
@@ -267,7 +267,6 @@ function printApplyNextSteps(file: string): void {
   console.log(`  allowly actions apply ${file}`);
   console.log(`  allowly policies apply ${file}`);
   console.log("  allowly keys create --write-env .env.local --var ALLOWLY_API_KEY");
-  console.log("AI customization is coming soon.");
 }
 
 function printManualNextSteps(): void {
@@ -285,12 +284,11 @@ async function promptSetupChoice(): Promise<SetupTemplateName | "manual"> {
   }
 
   const choices: Array<{ label: string; value: SetupTemplateName | "manual"; description: string }> = [
-    { label: "Email assistant", value: "email-agent", description: SETUP_TEMPLATE_DESCRIPTIONS["email-agent"] },
-    { label: "Browser automation", value: "browser-agent", description: SETUP_TEMPLATE_DESCRIPTIONS["browser-agent"] },
-    { label: "Client intelligence", value: "client-intelligence", description: SETUP_TEMPLATE_DESCRIPTIONS["client-intelligence"] },
-    { label: "Hiring disposition", value: "hiring-disposition", description: SETUP_TEMPLATE_DESCRIPTIONS["hiring-disposition"] },
-    { label: "MCP tool gating", value: "mcp-tool-gating", description: SETUP_TEMPLATE_DESCRIPTIONS["mcp-tool-gating"] },
-    { label: "No-code automation", value: "no-code-automation", description: SETUP_TEMPLATE_DESCRIPTIONS["no-code-automation"] },
+    ...SETUP_TEMPLATE_NAMES.map((name) => ({
+      label: SETUP_TEMPLATE_LABELS[name],
+      value: name,
+      description: SETUP_TEMPLATE_DESCRIPTIONS[name],
+    })),
     { label: "I'll set it up myself", value: "manual", description: "Start empty and configure actions and policies yourself." },
   ];
 
@@ -321,10 +319,6 @@ async function commandInit(args: string[]): Promise<void> {
   }
   if (args.includes("--list-use-cases")) {
     listUseCases();
-    return;
-  }
-  if (args.includes("--ai")) {
-    console.log("AI-customized setup seeds are coming soon. Use allowly init to choose a use case for now.");
     return;
   }
   if (args.includes("--manual") || args.includes("--self")) {
@@ -411,6 +405,7 @@ async function commandPoliciesApply(file: string | undefined): Promise<void> {
       actions: policy.actions.map((action) => ({ name: action.name, constraints: action.constraints ?? {} })),
       requires_confirm_for: policy.requires_confirm_for ?? [],
       requires_escalation_for: policy.requires_escalation_for ?? [],
+      requires_deny_for: policy.requires_deny_for ?? [],
       escalation_targets: policy.escalation_targets ?? {},
       default_expiry_days: policy.default_expiry_days,
     });
