@@ -197,7 +197,7 @@ const USE_CASE_SEEDS = {
   },
   "mcp-guardrails": {
     label: "MCP guardrails",
-    description: "Tool-call guardrails for MCP agents, with escalation available on Pro for high-risk tool actions.",
+    description: "Tool-call guardrails for MCP agents, with escalation available on Plus for high-risk tool actions.",
     actions: [
       {
         name: "mcp.tool.read",
