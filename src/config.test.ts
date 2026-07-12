@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 
-import { readConfig, writeConfig } from "./config.js";
+import { readConfig, removeConfig, writeConfig } from "./config.js";
 
 const dirs: string[] = [];
 
@@ -60,4 +60,16 @@ test("readConfig still accepts old manual setup-token config", async () => {
     workspaceId: undefined,
     workspaceName: undefined,
   });
+});
+
+test("removeConfig deletes local config and is idempotent", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "allowly-cli-"));
+  dirs.push(dir);
+  const path = join(dir, "config.json");
+
+  await writeConfig({ apiUrl: "https://api.allowly.ai", accessToken: "setup-token" }, path);
+
+  await expect(removeConfig(path)).resolves.toBe(true);
+  await expect(readConfig(path)).rejects.toThrow("Allowly CLI is not configured");
+  await expect(removeConfig(path)).resolves.toBe(false);
 });

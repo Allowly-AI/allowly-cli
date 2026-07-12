@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, writeConfig } from "./config.js";
+import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, removeConfig, writeConfig } from "./config.js";
 import { AllowlyCliError, apiRequest } from "./http.js";
 import {
   SETUP_TEMPLATE_ALIASES,
@@ -66,6 +66,7 @@ without dashboard or billing access.
 
 Commands:
   allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
+  allowly logout
   allowly status
   allowly init [--use-case ${SETUP_TEMPLATE_NAMES.join("|")}] [--file allowly.setup.json]
   allowly init --list-use-cases
@@ -193,6 +194,17 @@ async function commandStatus(): Promise<void> {
   const config = await readConfig();
   const status = await apiRequest<Record<string, unknown>>(config, "GET", "/v1/setup/status");
   console.log(JSON.stringify(status, null, 2));
+}
+
+async function commandLogout(): Promise<void> {
+  // ponytail: local-only logout. Setup tokens hard-expire server-side (<=24h);
+  // immediate server-side revoke is Dashboard -> setup tokens.
+  if (!(await removeConfig())) {
+    console.log("Already logged out (no CLI config found).");
+    return;
+  }
+  console.log("Removed local Allowly CLI config.");
+  console.log("Setup tokens expire on their own within 24h; revoke immediately from the dashboard if needed.");
 }
 
 async function commandSetupGuide(): Promise<void> {
@@ -523,6 +535,7 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   if (command === "login") return commandLogin(argv.slice(1));
+  if (command === "logout") return commandLogout();
   if (command === "status") return commandStatus();
   if (command === "init") return commandInit(argv.slice(1));
   if (command === "setup" && subcommand === "guide") return commandSetupGuide();

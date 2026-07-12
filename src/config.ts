@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -57,4 +57,14 @@ export async function writeConfig(config: CliConfig, path = configPath()): Promi
     { mode: 0o600 },
   );
   await chmod(path, 0o600);
+}
+
+export async function removeConfig(path = configPath()): Promise<boolean> {
+  try {
+    await unlink(path);
+    return true;
+  } catch (err) {
+    if ((err as { code?: string }).code === "ENOENT") return false;
+    throw err;
+  }
 }
