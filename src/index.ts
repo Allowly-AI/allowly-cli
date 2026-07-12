@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, writeConfig } from "./config.js";
 import { AllowlyCliError, apiRequest } from "./http.js";
 import {
+  SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
   SETUP_TEMPLATE_LABELS,
   SETUP_TEMPLATE_NAMES,
@@ -330,7 +331,7 @@ async function commandInit(args: string[]): Promise<void> {
     printManualNextSteps();
     return;
   }
-  const useCaseName = selected;
+  const useCaseName = SETUP_TEMPLATE_ALIASES[selected] ?? selected;
   if (!isSetupTemplateName(useCaseName)) {
     throw new Error(`Unknown setup use case "${useCaseName}". Use one of: ${SETUP_TEMPLATE_NAMES.join(", ")}`);
   }

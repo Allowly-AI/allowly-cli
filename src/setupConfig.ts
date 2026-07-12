@@ -33,6 +33,18 @@ interface UseCaseSeed {
   actions: ActionConfig[];
 }
 
+// Fields describe the AI draft and the review process, never a score about the candidate
+// (see allowly-site/use-cases/hiring-disposition.md).
+const HIRING_CONTEXT_FIELDS = {
+  outcome: "string",
+  reviewer_id: "string",
+  summary_grounded: "boolean",
+  transcript_completeness: "integer",
+  panel_feedback_complete: "boolean",
+  candidate_ai_opt_out: "boolean",
+  checks_failed: "list",
+};
+
 const USE_CASE_SEEDS = {
   "email-agent": {
     label: "Email assistant",
@@ -147,51 +159,19 @@ const USE_CASE_SEEDS = {
   },
   "hr-ops": {
     label: "HR and hiring",
-    description: "Candidate review, recruiting ops, and sensitive employment actions with confirmation and escalation paths.",
+    description: "AI drafts interview feedback; a named human reviews and confirms before anything posts to the candidate record.",
     actions: [
       {
-        name: "candidate.profile.read",
-        description: "Read candidate profile, resume, and application data for recruiting review.",
+        name: "hiring.synthesize_feedback",
+        description: "Draft a written summary from the transcript and panel notes for the interviewer to review.",
         requires_confirm: false,
-        constraints_schema: {},
+        constraints_schema: { context_fields: HIRING_CONTEXT_FIELDS },
       },
       {
-        name: "candidate.score.update",
-        description: "Write screening scores and recruiter notes back to the hiring system.",
+        name: "hiring.publish_feedback",
+        description: "Post the reviewed summary and the panel's outcome to the candidate record in the ATS.",
         requires_confirm: true,
-        constraints_schema: {
-          context_fields: {
-            score: "integer",
-            score_delta: "integer",
-            rule_fired: "list",
-          },
-        },
-      },
-      {
-        name: "candidate.reject",
-        description: "Reject or archive an applicant in the ATS.",
-        requires_confirm: false,
-        requires_escalation: true,
-        escalation_to: "hr_approver",
-        constraints_schema: {
-          context_fields: {
-            opt_out: "boolean",
-            score: "integer",
-            score_delta: "integer",
-            rule_fired: "list",
-          },
-        },
-      },
-      {
-        name: "candidate.outreach.send",
-        description: "Send recruiting outreach or scheduling messages to candidates.",
-        requires_confirm: true,
-        constraints_schema: {
-          context_fields: {
-            opt_out: "boolean",
-            template_name: "string",
-          },
-        },
+        constraints_schema: { context_fields: HIRING_CONTEXT_FIELDS },
       },
     ],
   },
@@ -286,6 +266,11 @@ const USE_CASE_SEEDS = {
 } satisfies Record<string, UseCaseSeed>;
 
 export type SetupTemplateName = keyof typeof USE_CASE_SEEDS;
+
+// Docs use the site's use-case slug; the seed key stays "hr-ops" for existing users.
+export const SETUP_TEMPLATE_ALIASES: Record<string, SetupTemplateName> = {
+  "hiring-disposition": "hr-ops",
+};
 
 export const SETUP_TEMPLATE_NAMES = Object.keys(USE_CASE_SEEDS) as SetupTemplateName[];
 

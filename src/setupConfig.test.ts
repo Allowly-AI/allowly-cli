@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 
-import { SETUP_TEMPLATE_NAMES, getSetupTemplate, loadSetupConfig, writeSampleSetupConfig } from "./setupConfig.js";
+import {
+  SETUP_TEMPLATE_ALIASES,
+  SETUP_TEMPLATE_NAMES,
+  getSetupTemplate,
+  loadSetupConfig,
+  writeSampleSetupConfig,
+} from "./setupConfig.js";
 
 const dirs: string[] = [];
 
@@ -111,19 +117,33 @@ test("generated browser policy confirms clicks and denies form submits", () => {
   expect(policy.default_expiry_days).toBe(365);
 });
 
-test("hr-ops template escalates candidate rejection", () => {
+test("hr-ops template gates publishing feedback on process integrity", () => {
   const seed = getSetupTemplate("hr-ops");
   const policy = seed.policies[0];
 
   expect(seed.actions.map((action) => action.name)).toEqual([
-    "candidate.profile.read",
-    "candidate.score.update",
-    "candidate.reject",
-    "candidate.outreach.send",
+    "hiring.synthesize_feedback",
+    "hiring.publish_feedback",
   ]);
-  expect(policy.requires_confirm_for).toEqual(["candidate.score.update", "candidate.outreach.send"]);
-  expect(policy.requires_escalation_for).toEqual(["candidate.reject"]);
-  expect(policy.escalation_targets?.["candidate.reject"]).toBe("hr_approver");
+  expect(policy.requires_confirm_for).toEqual(["hiring.publish_feedback"]);
+  expect(policy.requires_escalation_for).toEqual([]);
+  for (const action of seed.actions) {
+    expect(action.constraints_schema).toEqual({
+      context_fields: {
+        outcome: "string",
+        reviewer_id: "string",
+        summary_grounded: "boolean",
+        transcript_completeness: "integer",
+        panel_feedback_complete: "boolean",
+        candidate_ai_opt_out: "boolean",
+        checks_failed: "list",
+      },
+    });
+  }
+});
+
+test("hiring-disposition aliases the hr-ops template", () => {
+  expect(SETUP_TEMPLATE_ALIASES["hiring-disposition"]).toBe("hr-ops");
 });
 
 test("mcp-guardrails template escalates sensitive tool calls", () => {
