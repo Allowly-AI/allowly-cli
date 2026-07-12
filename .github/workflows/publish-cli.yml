@@ -48,10 +48,10 @@ jobs:
       - name: Inspect package
         run: npm pack --dry-run
 
-      - name: Publish private package
+      - name: Publish public package
         if: ${{ inputs.dry_run == 'false' }}
         env:
           # Create this as a GitHub Actions secret. It should be an npm
           # automation/access token with publish rights to the @allowly-ai scope.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access restricted
+        run: npm publish --access public

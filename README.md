@@ -4,6 +4,14 @@ Command-line setup tool for Allowly workspaces.
 
 Use it after a human creates an account, verifies email, and completes billing setup. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
 
+After the public npm package is released:
+
+```bash
+npm install -g @allowly-ai/cli
+```
+
+Then:
+
 ```bash
 allowly login
 allowly init --use-case email-agent
