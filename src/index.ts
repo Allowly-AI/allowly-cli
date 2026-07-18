@@ -135,7 +135,8 @@ function openBrowser(url: string): boolean {
 
 async function commandLogin(args: string[]): Promise<void> {
   const setupToken = option(args, "--setup-token");
-  const apiUrl = option(args, "--api-url") ?? DEFAULT_API_URL;
+  const apiUrlOverride = option(args, "--api-url");
+  const apiUrl = apiUrlOverride ?? DEFAULT_API_URL;
   const appUrl = option(args, "--app-url") ?? DEFAULT_APP_URL;
   if (setupToken) {
     await writeConfig({ apiUrl, accessToken: setupToken });
@@ -168,7 +169,7 @@ async function commandLogin(args: string[]): Promise<void> {
       continue;
     }
     const authorized = tokenResponse.data as DeviceTokenResponse;
-    const configuredApiUrl = authorized.api_url ?? apiUrl;
+    const configuredApiUrl = apiUrlOverride ?? authorized.api_url ?? DEFAULT_API_URL;
     await writeConfig({
       apiUrl: configuredApiUrl,
       accessToken: authorized.access_token,
