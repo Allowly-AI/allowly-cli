@@ -439,7 +439,7 @@ async function upsertEnvVar(path: string, name: string, value: string): Promise<
   } catch {
     existing = "";
   }
-  const lines = existing.split(/\r?\n/).filter(Boolean);
+  const lines = existing.length ? existing.replace(/\r?\n$/, "").split(/\r?\n/) : [];
   const nextLine = `${name}=${value}`;
   const replaced = lines.map((line) => line.startsWith(`${name}=`) ? nextLine : line);
   if (!lines.some((line) => line.startsWith(`${name}=`))) replaced.push(nextLine);
