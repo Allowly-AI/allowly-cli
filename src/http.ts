@@ -35,14 +35,19 @@ export async function apiRequest<T>(
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
-  const parsed = text ? JSON.parse(text) as ApiErrorBody : {};
   if (!response.ok) {
+    let parsed: ApiErrorBody = {};
+    try {
+      parsed = text ? JSON.parse(text) as ApiErrorBody : {};
+    } catch {
+      // Non-JSON proxy errors still get a useful status message.
+    }
     const code = parsed.error?.code ?? "error";
     const message = parsed.error?.message ?? `Allowly API returned ${response.status}`;
     // Never include Authorization headers or token-looking input in CLI errors.
     throw new AllowlyCliError(message, response.status, code);
   }
-  return parsed as T;
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export async function listAll<T>(config: CliConfig, path: string): Promise<T[]> {

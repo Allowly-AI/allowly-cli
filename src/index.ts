@@ -105,13 +105,18 @@ async function requestJson<T>(apiUrl: string, path: string, body: unknown): Prom
     body: JSON.stringify(body),
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) as T & { error?: { code?: string; message?: string } } : ({} as T);
   if (!response.ok && response.status !== 202) {
-    const errorBody = data as { error?: { code?: string; message?: string } };
+    let errorBody: { error?: { code?: string; message?: string } } = {};
+    try {
+      errorBody = text ? JSON.parse(text) as typeof errorBody : {};
+    } catch {
+      // Non-JSON proxy errors still get a useful status message.
+    }
     const message = errorBody.error?.message ?? `Allowly API returned ${response.status}`;
     const code = errorBody.error?.code ?? "error";
     throw new AllowlyCliError(message, response.status, code);
   }
+  const data = text ? JSON.parse(text) as T : ({} as T);
   return { status: response.status, data };
 }
 

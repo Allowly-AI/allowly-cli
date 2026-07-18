@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-import { listAll } from "./http.js";
+import { apiRequest, listAll } from "./http.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -20,4 +20,19 @@ test("listAll follows setup cursors", async () => {
     "https://api.allowly.ai/v1/setup/actions?limit=100",
     "https://api.allowly.ai/v1/setup/actions?limit=100&cursor=next%20cursor",
   ]);
+});
+
+test("apiRequest reports non-JSON API errors by status", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 })));
+
+  const request = apiRequest(
+    { apiUrl: "https://api.allowly.ai", accessToken: "token" },
+    "GET",
+    "/v1/setup/status",
+  );
+  await expect(request).rejects.toMatchObject({
+    message: "Allowly API returned 502",
+    status: 502,
+    code: "error",
+  });
 });
