@@ -566,7 +566,12 @@ async function main(argv: string[]): Promise<void> {
 
 main(process.argv.slice(2)).catch((err) => {
   if (err instanceof AllowlyCliError) {
-    console.error(`Allowly API error${err.code ? ` (${err.code})` : ""}: ${err.message}`);
+    const loginHint = err.status === 401
+      && !["check", "login"].includes(process.argv[2] ?? "")
+      && !err.message.includes("allowly login")
+      ? " Run `allowly login`."
+      : "";
+    console.error(`Allowly API error${err.code ? ` (${err.code})` : ""}: ${err.message}${loginHint}`);
   } else {
     console.error(err instanceof Error ? err.message : String(err));
   }
