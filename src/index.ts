@@ -163,11 +163,17 @@ async function commandLogin(args: string[]): Promise<void> {
   let pollIntervalMs = Math.max(1, device.interval || 3) * 1000;
   while (Date.now() < deadline) {
     await delay(pollIntervalMs);
-    const tokenResponse = await requestJson<DeviceTokenResponse | { status: "pending"; interval?: number }>(
-      appUrl,
-      "/v1/cli/device/token",
-      { device_code: device.device_code },
-    );
+    let tokenResponse;
+    try {
+      tokenResponse = await requestJson<DeviceTokenResponse | { status: "pending"; interval?: number }>(
+        appUrl,
+        "/v1/cli/device/token",
+        { device_code: device.device_code },
+      );
+    } catch (err) {
+      if (!(err instanceof TypeError)) throw err;
+      continue;
+    }
     if (tokenResponse.status === 202 || tokenResponse.data.status === "pending") {
       const pending = tokenResponse.data as { status: "pending"; interval?: number };
       pollIntervalMs = Math.max(1, pending.interval ?? device.interval ?? 3) * 1000;
