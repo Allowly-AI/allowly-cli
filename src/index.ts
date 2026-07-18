@@ -543,7 +543,7 @@ async function commandKeysCreate(args: string[]): Promise<void> {
 }
 
 async function main(argv: string[]): Promise<void> {
-  const [command, subcommand, action, fileOrArg, ...rest] = argv;
+  const [command, subcommand, action] = argv;
   if (!command || command === "--help" || command === "-h") {
     console.log(usage());
     return;
@@ -559,7 +559,7 @@ async function main(argv: string[]): Promise<void> {
   if (command === "setup" && subcommand === "guide") return commandSetupGuide();
   if (command === "actions" && subcommand === "apply") return commandActionsApply(action);
   if (command === "policies" && subcommand === "apply") return commandPoliciesApply(action);
-  if (command === "keys" && subcommand === "create") return commandKeysCreate([action, fileOrArg, ...rest].filter(Boolean));
+  if (command === "keys" && subcommand === "create") return commandKeysCreate(argv.slice(2));
   if (command === "check") return commandCheck(argv.slice(1));
   throw new Error(`Unknown command.\n\n${usage()}`);
 }
