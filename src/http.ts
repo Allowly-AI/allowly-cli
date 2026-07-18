@@ -44,3 +44,18 @@ export async function apiRequest<T>(
   }
   return parsed as T;
 }
+
+export async function listAll<T>(config: CliConfig, path: string): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await apiRequest<{ items: T[]; next_cursor?: string | null }>(
+      config,
+      "GET",
+      `${path}?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    items.push(...page.items);
+    cursor = page.next_cursor ?? undefined;
+  } while (cursor);
+  return items;
+}

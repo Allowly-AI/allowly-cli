@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, removeConfig, writeConfig } from "./config.js";
-import { AllowlyCliError, apiRequest } from "./http.js";
+import { AllowlyCliError, apiRequest, listAll } from "./http.js";
 import {
   SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -18,14 +18,6 @@ import {
   writeSampleSetupConfig,
   type SetupTemplateName,
 } from "./setupConfig.js";
-
-interface ActionResponse {
-  items: Array<{ id: string; name: string }>;
-}
-
-interface PolicyResponse {
-  items: Array<{ policy_id?: string }>;
-}
 
 interface RuntimeKeyResponse {
   id: string;
@@ -365,8 +357,8 @@ async function commandActionsApply(file: string | undefined): Promise<void> {
   if (!file) throw new Error("Missing setup config path");
   const config = await readConfig();
   const setup = await loadSetupConfig(resolve(file));
-  const existing = await apiRequest<ActionResponse>(config, "GET", "/v1/setup/actions");
-  const existingNames = new Set(existing.items.map((action) => action.name));
+  const existing = await listAll<{ name: string }>(config, "/v1/setup/actions");
+  const existingNames = new Set(existing.map((action) => action.name));
 
   // Apply is intentionally idempotent: create missing resources, skip matches,
   // and never delete remote state unless a future explicit --prune is added.
@@ -391,8 +383,8 @@ async function commandPoliciesApply(file: string | undefined): Promise<void> {
   if (!file) throw new Error("Missing setup config path");
   const config = await readConfig();
   const setup = await loadSetupConfig(resolve(file));
-  const actions = await apiRequest<ActionResponse>(config, "GET", "/v1/setup/actions");
-  const remoteActionNames = new Set(actions.items.map((action) => action.name));
+  const actions = await listAll<{ name: string }>(config, "/v1/setup/actions");
+  const remoteActionNames = new Set(actions.map((action) => action.name));
   for (const policy of setup.policies) {
     const missing = policy.actions.map((action) => action.name).filter((name) => !remoteActionNames.has(name));
     if (missing.length) {
@@ -400,9 +392,9 @@ async function commandPoliciesApply(file: string | undefined): Promise<void> {
     }
   }
 
-  const existing = await apiRequest<PolicyResponse>(config, "GET", "/v1/setup/policies");
+  const existing = await listAll<{ policy_id?: string }>(config, "/v1/setup/policies");
   const existingIds = new Set(
-    existing.items
+    existing
       .map((policy) => policy.policy_id)
       .filter((policyId): policyId is string => Boolean(policyId)),
   );
