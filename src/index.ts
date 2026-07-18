@@ -87,13 +87,14 @@ Runtime check flow:
 function option(args: string[], name: string): string | undefined {
   const idx = args.indexOf(name);
   if (idx === -1) return undefined;
-  return args[idx + 1];
+  const value = args[idx + 1];
+  return value === undefined || value.startsWith("--") ? undefined : value;
 }
 
 function options(args: string[], name: string): string[] {
   const values: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === name && args[i + 1]) values.push(args[i + 1]);
+    if (args[i] === name && args[i + 1] && !args[i + 1].startsWith("--")) values.push(args[i + 1]);
   }
   return values;
 }
