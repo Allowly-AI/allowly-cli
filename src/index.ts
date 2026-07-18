@@ -495,7 +495,19 @@ async function commandCheck(args: string[]): Promise<void> {
   const resource = option(args, "--resource");
   const sessionId = option(args, "--session-id");
   const contextRaw = option(args, "--context");
-  const context = contextRaw ? JSON.parse(contextRaw) as Record<string, unknown> : {};
+  let context: Record<string, unknown> = {};
+  if (contextRaw) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contextRaw);
+    } catch {
+      throw new Error("--context must be valid JSON");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("--context must be a JSON object");
+    }
+    context = parsed as Record<string, unknown>;
+  }
   const config = await runtimeConfigFromArgs(args);
   const result = await apiRequest<Record<string, unknown>>(
     config,

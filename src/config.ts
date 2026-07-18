@@ -25,7 +25,14 @@ export async function readConfig(path = configPath()): Promise<CliConfig> {
   } catch {
     throw new Error("Allowly CLI is not configured. Run `allowly login` first.");
   }
-  const parsed = JSON.parse(raw) as Partial<CliConfig> & { setupToken?: string };
+  let parsed: Partial<CliConfig> & { setupToken?: string };
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object") throw new Error();
+    parsed = value as Partial<CliConfig> & { setupToken?: string };
+  } catch {
+    throw new Error("Allowly CLI config is corrupt. Run `allowly login` again.");
+  }
   const accessToken = parsed.accessToken ?? parsed.setupToken;
   if (!parsed.apiUrl || !accessToken) {
     throw new Error("Allowly CLI config is missing apiUrl or accessToken. Run `allowly login` again.");

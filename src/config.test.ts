@@ -62,6 +62,15 @@ test("readConfig still accepts old manual setup-token config", async () => {
   });
 });
 
+test("readConfig explains corrupt JSON", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "allowly-cli-"));
+  dirs.push(dir);
+  const path = join(dir, "config.json");
+  await writeFile(path, "{not json", { mode: 0o600 });
+
+  await expect(readConfig(path)).rejects.toThrow("Allowly CLI config is corrupt. Run `allowly login` again.");
+});
+
 test("removeConfig deletes local config and is idempotent", async () => {
   const dir = await mkdtemp(join(tmpdir(), "allowly-cli-"));
   dirs.push(dir);
