@@ -23,7 +23,8 @@ test("listAll follows setup cursors", async () => {
 });
 
 test("apiRequest reports non-JSON API errors by status", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 })));
+  const fetch = vi.fn().mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 }));
+  vi.stubGlobal("fetch", fetch);
 
   const request = apiRequest(
     { apiUrl: "https://api.allowly.ai", accessToken: "token" },
@@ -35,4 +36,5 @@ test("apiRequest reports non-JSON API errors by status", async () => {
     status: 502,
     code: "error",
   });
+  expect((fetch.mock.calls[0]?.[1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
 });

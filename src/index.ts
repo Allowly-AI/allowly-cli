@@ -103,6 +103,7 @@ async function requestJson<T>(apiUrl: string, path: string, body: unknown): Prom
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
   });
   const text = await response.text();
   if (!response.ok && response.status !== 202) {
@@ -171,7 +172,7 @@ async function commandLogin(args: string[]): Promise<void> {
         { device_code: device.device_code },
       );
     } catch (err) {
-      if (!(err instanceof TypeError)) throw err;
+      if (!(err instanceof TypeError || (err instanceof DOMException && err.name === "TimeoutError"))) throw err;
       continue;
     }
     if (tokenResponse.status === 202 || tokenResponse.data.status === "pending") {
