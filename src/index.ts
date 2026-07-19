@@ -363,6 +363,7 @@ async function commandInit(args: string[]): Promise<void> {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "EEXIST") {
       console.log(`${file} already exists`);
+      printApplyNextSteps(file);
       return;
     }
     throw err;
