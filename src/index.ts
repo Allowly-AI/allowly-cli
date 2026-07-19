@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -59,6 +60,7 @@ without dashboard or billing access.
 Commands:
   allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
   allowly logout
+  allowly --version
   allowly status
   allowly init [--use-case ${SETUP_TEMPLATE_NAMES.join("|")}] [--file allowly.setup.json]
   allowly init --list-use-cases
@@ -550,6 +552,10 @@ async function main(argv: string[]): Promise<void> {
   }
   if (command === "help") {
     console.log(usage());
+    return;
+  }
+  if (command === "--version" || command === "-v") {
+    console.log(createRequire(import.meta.url)("../package.json").version);
     return;
   }
   if (command === "login") return commandLogin(argv.slice(1));
