@@ -46,3 +46,7 @@ Runtime API keys are shown once. Write them to local env files or a secret manag
 Use `--write-env` for local env-file output. `--env-file` is intentionally not documented because recent Node versions reserve that flag for Node itself.
 
 `allowly check` is a runtime helper. It requires a runtime API key from `--api-key`, `ALLOWLY_API_KEY`, or `--runtime-env`; it does not use the CLI setup credential. Receipt signing still happens server-side in the Allowly API.
+
+The command prints the runtime response unchanged. Signed receipts use format
+`2.0.0`: `alg` and `key_id` are signed top-level fields, and `signature` is the
+unpadded base64url string. Use an Allowly SDK verifier for offline verification.
