@@ -1,6 +1,6 @@
 {
   "name": "@allowly-ai/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Command-line setup tool for Allowly workspaces",
   "type": "module",
   "bin": {
