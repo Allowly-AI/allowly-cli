@@ -21,6 +21,10 @@
   "engines": {
     "node": ">=20"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Allowly-AI/allowly-cli.git"
+  },
   "devDependencies": {
     "@types/node": "^20.19.40",
     "tsup": "^8.5.1",
