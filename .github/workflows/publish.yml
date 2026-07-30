@@ -33,6 +33,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           scope: "@allowly-ai"
       - run: npm ci
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
       - name: Check tag matches package version
