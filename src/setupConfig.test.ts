@@ -8,6 +8,7 @@ import {
   SETUP_TEMPLATE_NAMES,
   getSetupTemplate,
   loadSetupConfig,
+  setupConfigFromPolicyDraft,
   writeSampleSetupConfig,
 } from "./setupConfig.js";
 
@@ -69,6 +70,77 @@ test("loadSetupConfig rejects policies without actions", async () => {
   });
 
   await expect(loadSetupConfig(path)).rejects.toThrow("must include at least one action");
+});
+
+test("AI policy drafts become local setup files without creating resources", () => {
+  const setup = setupConfigFromPolicyDraft({
+    policy_id: "calendar_assistant_policy",
+    agent_id: "calendar_assistant",
+    description: "List calendar events and confirm before deleting them.",
+    actions: [
+      {
+        name: "calendar.event.list",
+        description: "List calendar events",
+        approval_mode: "allow",
+        escalation_to: "",
+        context_fields: [],
+        constraints: { deny_when: [], confirm_when: [], escalate_when: [] },
+        is_new: true,
+      },
+      {
+        name: "calendar.event.delete",
+        description: "Delete a calendar event",
+        approval_mode: "confirm",
+        escalation_to: "owner",
+        context_fields: [{ name: "risk", type: "integer" }],
+        constraints: {
+          deny_when: [{ field: "risk", op: "gte", value: 9 }],
+          confirm_when: [],
+          escalate_when: [{ field: "risk", op: "gte", value: 7 }],
+        },
+        is_new: true,
+      },
+    ],
+  });
+
+  expect(setup).toEqual({
+    actions: [
+      {
+        name: "calendar.event.list",
+        description: "List calendar events",
+        requires_confirm: false,
+        requires_escalation: false,
+        constraints_schema: {},
+      },
+      {
+        name: "calendar.event.delete",
+        description: "Delete a calendar event",
+        requires_confirm: true,
+        requires_escalation: false,
+        constraints_schema: { context_fields: { risk: "integer" } },
+      },
+    ],
+    policies: [{
+      policy_id: "calendar_assistant_policy",
+      agent_id: "calendar_assistant",
+      description: "List calendar events and confirm before deleting them.",
+      actions: [
+        { name: "calendar.event.list", constraints: {} },
+        {
+          name: "calendar.event.delete",
+          constraints: {
+            deny_when: [{ field: "risk", gte: 9 }],
+            escalate_when: [{ field: "risk", gte: 7 }],
+          },
+        },
+      ],
+      requires_confirm_for: ["calendar.event.delete"],
+      requires_escalation_for: [],
+      requires_deny_for: [],
+      escalation_targets: { "calendar.event.delete": "owner" },
+      default_expiry_days: 365,
+    }],
+  });
 });
 
 test("starter policies are valid setup configs", async () => {

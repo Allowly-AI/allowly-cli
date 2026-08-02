@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 
-import { readConfig, removeConfig, writeConfig } from "./config.js";
+import { DEFAULT_APP_URL, readConfig, removeConfig, writeConfig } from "./config.js";
 
 const dirs: string[] = [];
 
@@ -18,6 +18,7 @@ test("writeConfig stores CLI access token with owner-only permissions", async ()
 
   await writeConfig({
     apiUrl: "https://api.allowly.ai/",
+    appUrl: "http://localhost:3000/",
     accessToken: "allowly_t1_s001_cli_secret",
     expiresAt: "2026-07-22T00:00:00Z",
     workspaceId: "ws_test",
@@ -27,6 +28,7 @@ test("writeConfig stores CLI access token with owner-only permissions", async ()
   const saved = JSON.parse(await readFile(path, "utf8"));
   expect(saved).toEqual({
     apiUrl: "https://api.allowly.ai",
+    appUrl: "http://localhost:3000",
     accessToken: "allowly_t1_s001_cli_secret",
     expiresAt: "2026-07-22T00:00:00Z",
     workspaceId: "ws_test",
@@ -35,6 +37,7 @@ test("writeConfig stores CLI access token with owner-only permissions", async ()
   expect((await stat(path)).mode & 0o777).toBe(0o600);
   await expect(readConfig(path)).resolves.toEqual({
     apiUrl: "https://api.allowly.ai",
+    appUrl: "http://localhost:3000",
     accessToken: "allowly_t1_s001_cli_secret",
     expiresAt: "2026-07-22T00:00:00Z",
     workspaceId: "ws_test",
@@ -55,6 +58,7 @@ test("readConfig still accepts old manual setup-token config", async () => {
 
   await expect(readConfig(path)).resolves.toEqual({
     apiUrl: "https://api.allowly.ai",
+    appUrl: DEFAULT_APP_URL,
     accessToken: "allowly_t1_s001_setup_secret",
     expiresAt: undefined,
     workspaceId: undefined,

@@ -27,6 +27,37 @@ export interface AllowlySetupConfig {
   policies: PolicyConfig[];
 }
 
+type ApprovalMode = "allow" | "confirm" | "escalate" | "deny";
+
+interface DraftCondition {
+  field: string;
+  op: string;
+  value: unknown;
+}
+
+interface DraftConstraints {
+  deny_when: DraftCondition[];
+  confirm_when: DraftCondition[];
+  escalate_when: DraftCondition[];
+}
+
+interface DraftAction {
+  name: string;
+  description: string;
+  approval_mode: ApprovalMode;
+  escalation_to: string;
+  context_fields: Array<{ name: string; type: string }>;
+  constraints: DraftConstraints;
+  is_new: boolean;
+}
+
+export interface PolicyDraft {
+  policy_id: string;
+  agent_id: string;
+  description: string;
+  actions: DraftAction[];
+}
+
 interface UseCaseSeed {
   label: string;
   description: string;
@@ -310,6 +341,43 @@ export function getSetupTemplate(name: SetupTemplateName): AllowlySetupConfig {
   return {
     actions: seed.actions,
     policies: [generatedPolicy(name, seed)],
+  };
+}
+
+export function setupConfigFromPolicyDraft(draft: PolicyDraft): AllowlySetupConfig {
+  const constraints = (action: DraftAction): Record<string, unknown> => Object.fromEntries(
+    (["deny_when", "confirm_when", "escalate_when"] as const)
+      .map((kind) => [kind, action.constraints[kind].map((condition) => ({
+        field: condition.field,
+        [condition.op]: condition.value,
+      }))] as const)
+      .filter(([, conditions]) => conditions.length > 0),
+  );
+
+  return {
+    actions: draft.actions.map((action) => ({
+      name: action.name,
+      description: action.description,
+      requires_confirm: action.approval_mode === "confirm",
+      requires_escalation: action.approval_mode === "escalate",
+      ...(action.approval_mode === "escalate" ? { escalation_to: action.escalation_to } : {}),
+      constraints_schema: action.context_fields.length === 0
+        ? {}
+        : { context_fields: Object.fromEntries(action.context_fields.map((field) => [field.name, field.type])) },
+    })),
+    policies: [{
+      policy_id: draft.policy_id,
+      agent_id: draft.agent_id,
+      description: draft.description,
+      actions: draft.actions.map((action) => ({ name: action.name, constraints: constraints(action) })),
+      requires_confirm_for: draft.actions.filter((action) => action.approval_mode === "confirm").map((action) => action.name),
+      requires_escalation_for: draft.actions.filter((action) => action.approval_mode === "escalate").map((action) => action.name),
+      requires_deny_for: draft.actions.filter((action) => action.approval_mode === "deny").map((action) => action.name),
+      escalation_targets: Object.fromEntries(draft.actions
+        .filter((action) => (action.approval_mode === "escalate" || action.constraints.escalate_when.length > 0) && action.escalation_to)
+        .map((action) => [action.name, action.escalation_to])),
+      default_expiry_days: 365,
+    }],
   };
 }
 

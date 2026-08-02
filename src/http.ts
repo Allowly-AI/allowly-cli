@@ -22,6 +22,7 @@ export async function apiRequest<T>(
   method: string,
   path: string,
   body?: unknown,
+  timeoutMs = 30_000,
 ): Promise<T> {
   const response = await fetch(`${config.apiUrl}${path}`, {
     method,
@@ -30,7 +31,7 @@ export async function apiRequest<T>(
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (response.status === 204) return undefined as T;
