@@ -7,6 +7,7 @@ export const DEFAULT_APP_URL = "https://app.allowly.ai";
 
 export interface CliConfig {
   apiUrl: string;
+  appUrl?: string;
   accessToken: string;
   expiresAt?: string;
   workspaceId?: string;
@@ -39,6 +40,7 @@ export async function readConfig(path = configPath()): Promise<CliConfig> {
   }
   return {
     apiUrl: parsed.apiUrl.replace(/\/$/, ""),
+    appUrl: (parsed.appUrl ?? DEFAULT_APP_URL).replace(/\/$/, ""),
     accessToken,
     expiresAt: parsed.expiresAt,
     workspaceId: parsed.workspaceId,
@@ -53,6 +55,7 @@ export async function writeConfig(config: CliConfig, path = configPath()): Promi
     JSON.stringify(
       {
         apiUrl: config.apiUrl.replace(/\/$/, ""),
+        appUrl: config.appUrl?.replace(/\/$/, ""),
         accessToken: config.accessToken,
         expiresAt: config.expiresAt,
         workspaceId: config.workspaceId,

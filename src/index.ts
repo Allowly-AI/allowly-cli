@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
@@ -16,7 +16,9 @@ import {
   getSetupTemplate,
   isSetupTemplateName,
   loadSetupConfig,
+  setupConfigFromPolicyDraft,
   writeSampleSetupConfig,
+  type PolicyDraft,
   type SetupTemplateName,
 } from "./setupConfig.js";
 
@@ -52,7 +54,9 @@ interface DeviceTokenResponse {
 function usage(): string {
   return `Allowly CLI
 
-Allowly is API-first after account, email, and billing setup.
+Allowly is API-first after account and email verification.
+Billing is not required for setup or the first successful runtime check;
+later new checks require a payment method.
 Run allowly login once, approve the CLI in your browser, then let Codex,
 Claude Code, or a script configure actions, policies, and runtime API keys
 without dashboard or billing access.
@@ -62,6 +66,7 @@ Commands:
   allowly logout
   allowly --version
   allowly status
+  allowly init --ai "<describe the policy>" [--file allowly.setup.json]
   allowly init [--use-case ${SETUP_TEMPLATE_NAMES.join("|")}] [--file allowly.setup.json]
   allowly init --list-use-cases
   allowly init --manual
@@ -187,12 +192,14 @@ async function commandLogin(args: string[]): Promise<void> {
     const configuredApiUrl = apiUrlOverride ?? authorized.api_url ?? DEFAULT_API_URL;
     await writeConfig({
       apiUrl: configuredApiUrl,
+      appUrl,
       accessToken: authorized.access_token,
       expiresAt: authorized.expires_at,
       workspaceId: authorized.workspace_id,
       workspaceName: authorized.workspace_name,
     });
     console.log(`Allowly CLI configured for ${authorized.workspace_name} (${configuredApiUrl.replace(/\/$/, "")})`);
+    console.log('Next: allowly init --ai "Describe the agent and what needs approval."');
     return;
   }
   throw new AllowlyCliError("CLI login code expired. Run `allowly login` again.", 401, "authorization_expired");
@@ -340,6 +347,48 @@ async function commandInit(args: string[]): Promise<void> {
   }
   if (args.includes("--list-use-cases")) {
     listUseCases();
+    return;
+  }
+  if (args.includes("--ai")) {
+    const config = await readConfig();
+    if (!config.workspaceId) {
+      throw new Error("AI policy drafting requires an authenticated workspace. Run `allowly login` again.");
+    }
+    let description = option(args, "--ai");
+    if (!description) {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        throw new Error('Missing AI policy description. Use: allowly init --ai "Describe the policy"');
+      }
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        description = await rl.question("Describe the agent and what needs approval: ");
+      } finally {
+        rl.close();
+      }
+    }
+    description = description.trim();
+    if (description.length < 20 || description.length > 4000) {
+      throw new Error("AI policy description must be between 20 and 4000 characters.");
+    }
+    const file = option(args, "--file") ?? "allowly.setup.json";
+    try {
+      await access(file);
+      console.log(`${file} already exists`);
+      printApplyNextSteps(file);
+      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    const result = await apiRequest<{ draft: PolicyDraft }>(
+      { ...config, apiUrl: config.appUrl ?? DEFAULT_APP_URL },
+      "POST",
+      "/v1/cli/policies/draft",
+      { workspace_id: config.workspaceId, description },
+      60_000,
+    );
+    await writeSampleSetupConfig(file, setupConfigFromPolicyDraft(result.draft));
+    console.log(`Created ${file} from an AI draft; no workspace resources were changed.`);
+    printApplyNextSteps(file);
     return;
   }
   if (args.includes("--manual") || args.includes("--self")) {

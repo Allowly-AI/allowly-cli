@@ -2,9 +2,17 @@
 
 Command-line setup tool for Allowly workspaces.
 
-Use it after a human creates an account, verifies email, and completes billing setup. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
+Use it after a human creates an account and verifies email. Billing is not required for setup or the first successful runtime check; later new checks require a payment method. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
 
-After the public npm package is released:
+After approval, the saved CLI credential can ask the app's AI drafting service for a local setup file:
+
+```bash
+allowly init --ai "Allow listing calendar events and require confirmation before deleting events."
+```
+
+This only writes `allowly.setup.json`. Review it first; the existing `actions apply` and `policies apply` commands create workspace resources.
+
+Install the public npm package:
 
 ```bash
 npm install -g @allowly-ai/cli
@@ -14,13 +22,15 @@ Then:
 
 ```bash
 allowly login
-allowly init --use-case email-agent
+allowly init --ai "Allow listing calendar events and confirm before deleting events."
 allowly actions apply allowly.setup.json
 allowly policies apply allowly.setup.json
 allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
 allowly setup guide
 allowly check --authorization-id auth_... --action web.search --runtime-env .env.local
 ```
+
+Use `allowly init --use-case email-agent` instead when you want a built-in seed rather than AI drafting.
 
 `allowly login` talks to the dashboard app for browser approval and stores the public API URL returned by Allowly for setup calls. Use `--app-url` for local app development and `--api-url` only when you need to override the API URL written to the local CLI config.
 
@@ -47,6 +57,6 @@ Use `--write-env` for local env-file output. `--env-file` is intentionally not d
 
 `allowly check` is a runtime helper. It requires a runtime API key from `--api-key`, `ALLOWLY_API_KEY`, or `--runtime-env`; it does not use the CLI setup credential. Receipt signing still happens server-side in the Allowly API.
 
-The command prints the runtime response unchanged. Signed receipts use wire format
-`3` (`schema_version`): `alg` and `key_id` are signed top-level fields, and `signature` is the
+The command prints the runtime response unchanged. Signed receipts carry a
+`schema_version`; `alg` and `key_id` are signed top-level fields, and `signature` is the
 unpadded base64url string. Use an Allowly SDK verifier for offline verification.
