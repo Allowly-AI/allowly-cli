@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 
-import { DEFAULT_APP_URL, readConfig, removeConfig, writeConfig } from "./config.js";
+import {
+  DEFAULT_APP_URL,
+  readConfig,
+  removeConfig,
+  removeConfigIfCredentialMatches,
+  writeConfig,
+} from "./config.js";
 
 const dirs: string[] = [];
 
@@ -85,4 +91,14 @@ test("removeConfig deletes local config and is idempotent", async () => {
   await expect(removeConfig(path)).resolves.toBe(true);
   await expect(readConfig(path)).rejects.toThrow("Allowly CLI is not configured");
   await expect(removeConfig(path)).resolves.toBe(false);
+});
+
+test("conditional removal preserves a newer credential", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "allowly-cli-"));
+  dirs.push(dir);
+  const path = join(dir, "config.json");
+  await writeConfig({ apiUrl: "https://api.allowly.ai", accessToken: "new-token" }, path);
+
+  await expect(removeConfigIfCredentialMatches("old-token", path)).resolves.toBe(false);
+  await expect(readConfig(path)).resolves.toMatchObject({ accessToken: "new-token" });
 });
