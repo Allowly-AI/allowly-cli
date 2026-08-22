@@ -1,4 +1,5 @@
-import { mkdir, readFile, unlink, writeFile, chmod } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { chmod, link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -77,4 +78,43 @@ export async function removeConfig(path = configPath()): Promise<boolean> {
     if ((err as { code?: string }).code === "ENOENT") return false;
     throw err;
   }
+}
+
+export async function removeConfigIfCredentialMatches(
+  accessToken: string,
+  path = configPath(),
+): Promise<boolean> {
+  const claimPath = `${path}.logout-${process.pid}-${randomUUID()}`;
+  try {
+    // Claim exactly one config generation before inspecting it.
+    await rename(path, claimPath);
+  } catch (err) {
+    if ((err as { code?: string }).code === "ENOENT") return false;
+    throw err;
+  }
+
+  let matches = false;
+  try {
+    const value: unknown = JSON.parse(await readFile(claimPath, "utf8"));
+    if (value && typeof value === "object") {
+      const parsed = value as { accessToken?: unknown; setupToken?: unknown };
+      matches = (parsed.accessToken ?? parsed.setupToken) === accessToken;
+    }
+  } catch {
+    // Keep malformed or unreadable config rather than deleting it.
+  }
+
+  if (matches) {
+    await unlink(claimPath);
+    return true;
+  }
+
+  try {
+    // A hard link restores the claim only when a newer login has not recreated the path.
+    await link(claimPath, path);
+  } catch (err) {
+    if ((err as { code?: string }).code !== "EEXIST") throw err;
+  }
+  await unlink(claimPath);
+  return false;
 }

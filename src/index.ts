@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { DEFAULT_API_URL, DEFAULT_APP_URL, readConfig, removeConfig, writeConfig } from "./config.js";
+import { DEFAULT_API_URL, DEFAULT_APP_URL, configPath, readConfig, removeConfigIfCredentialMatches, writeConfig } from "./config.js";
 import { AllowlyCliError, apiRequest, listAll } from "./http.js";
 import {
   SETUP_TEMPLATE_ALIASES,
@@ -212,14 +212,45 @@ async function commandStatus(): Promise<void> {
 }
 
 async function commandLogout(): Promise<void> {
-  // ponytail: local-only logout. Setup tokens hard-expire server-side (<=24h);
-  // immediate server-side revoke is Dashboard -> setup tokens.
-  if (!(await removeConfig())) {
-    console.log("Already logged out (no CLI config found).");
+  try {
+    await access(configPath());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      console.log("Already logged out (no CLI config found).");
+      return;
+    }
+    throw err;
+  }
+
+  const config = await readConfig();
+  let staleCredential = false;
+  try {
+    await apiRequest<void>(config, "DELETE", "/v1/setup/credential");
+  } catch (err) {
+    if (err instanceof AllowlyCliError && err.status === 401) {
+      staleCredential = true;
+    } else {
+      const reason = err instanceof Error ? `: ${err.message}` : "";
+      throw new Error(
+        `Could not revoke the server credential${reason}. Local login was kept; retry \`allowly logout\`.`,
+      );
+    }
+  }
+
+  const removed = await removeConfigIfCredentialMatches(config.accessToken);
+  if (!removed) {
+    console.log(
+      staleCredential
+        ? "The server credential was already invalid or expired; local config had already changed or been removed."
+        : "The server credential was revoked; local config had already changed or been removed.",
+    );
     return;
   }
-  console.log("Removed local Allowly CLI config.");
-  console.log("Setup tokens expire on their own within 24h; revoke immediately from the dashboard if needed.");
+  console.log(
+    staleCredential
+      ? "Removed stale local Allowly CLI config; the server credential was already invalid or expired."
+      : "Logged out and revoked the Allowly CLI credential.",
+  );
 }
 
 async function commandSetupGuide(): Promise<void> {
@@ -596,7 +627,7 @@ async function commandKeysCreate(args: string[]): Promise<void> {
 
 async function main(argv: string[]): Promise<void> {
   const [command, subcommand, action] = argv;
-  if (!command || command === "--help" || command === "-h") {
+  if (!command || argv.includes("--help") || argv.includes("-h")) {
     console.log(usage());
     return;
   }
