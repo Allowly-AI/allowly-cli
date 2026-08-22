@@ -212,14 +212,13 @@ async function commandStatus(): Promise<void> {
 }
 
 async function commandLogout(): Promise<void> {
-  // ponytail: local-only logout. Setup tokens hard-expire server-side (<=24h);
-  // immediate server-side revoke is Dashboard -> setup tokens.
+  // ponytail: local-only logout; immediate server revocation stays in the dashboard.
   if (!(await removeConfig())) {
     console.log("Already logged out (no CLI config found).");
     return;
   }
   console.log("Removed local Allowly CLI config.");
-  console.log("Setup tokens expire on their own within 24h; revoke immediately from the dashboard if needed.");
+  console.log("The server credential remains valid until expiry; revoke it from the dashboard's API Keys page to end it immediately.");
 }
 
 async function commandSetupGuide(): Promise<void> {
@@ -596,7 +595,7 @@ async function commandKeysCreate(args: string[]): Promise<void> {
 
 async function main(argv: string[]): Promise<void> {
   const [command, subcommand, action] = argv;
-  if (!command || command === "--help" || command === "-h") {
+  if (!command || argv.includes("--help") || argv.includes("-h")) {
     console.log(usage());
     return;
   }
