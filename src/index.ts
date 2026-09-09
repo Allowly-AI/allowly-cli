@@ -55,8 +55,9 @@ function usage(): string {
   return `Allowly CLI
 
 Allowly is API-first after account and email verification.
-Billing is not required for setup or the first successful runtime check;
-later new checks require a payment method.
+Billing is not required for setup. Free, Enterprise, and existing complimentary
+accounts need no payment method. Other Starter and Plus accounts require one
+after their first valid runtime check.
 Run allowly login once, approve the CLI in your browser, then let Codex,
 Claude Code, or a script configure actions, policies, and runtime API keys
 without dashboard or billing access.

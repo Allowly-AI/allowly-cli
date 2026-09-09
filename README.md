@@ -2,7 +2,7 @@
 
 Command-line setup tool for Allowly workspaces.
 
-Use it after a human creates an account and verifies email. Billing is not required for setup or the first successful runtime check; later new checks require a payment method. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
+Use it after a human creates an account and verifies email. Billing is not required for setup. Free, Enterprise, and existing complimentary accounts need no payment method. Other Starter and Plus accounts require one after their first valid runtime check. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
 
 After approval, the saved CLI credential can ask the app's AI drafting service for a local setup file:
 
