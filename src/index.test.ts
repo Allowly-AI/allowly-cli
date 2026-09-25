@@ -131,3 +131,75 @@ test.each(logoutFailures)("logout keeps local config after %s", async (_failure,
   expect(error).toHaveBeenCalledWith(expect.stringContaining("retry `allowly logout`"));
   expect(process.exitCode).toBe(1);
 });
+
+test("check sends the agent token in a header and the client timestamp in the body", async () => {
+  await configureCli();
+  const runtimeEnv = join(await mkdtemp(join(tmpdir(), "allowly-cli-runtime-")), ".env");
+  tempDirs.push(runtimeEnv.slice(0, runtimeEnv.lastIndexOf("/")));
+  await fsPromises.writeFile(
+    runtimeEnv,
+    "ALLOWLY_API_KEY=runtime-secret\nALLOWLY_AGENT_TOKEN=agent-secret\n",
+    { mode: 0o600 },
+  );
+  const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+    expect(init?.headers).toEqual({
+      Authorization: "Bearer runtime-secret",
+      "Content-Type": "application/json",
+      "X-Allowly-Agent-Token": "agent-secret",
+    });
+    expect(init?.redirect).toBe("manual");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      authorization_id: "auth_123",
+      actions: ["mail.send"],
+      client_timestamp: "2026-09-24T18:00:00-07:00",
+      context: {},
+    });
+    return new Response(JSON.stringify({ decision: "allow" }));
+  });
+  vi.stubGlobal("fetch", fetch);
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  process.argv = [
+    process.execPath,
+    "allowly",
+    "check",
+    "--authorization-id",
+    "auth_123",
+    "--action",
+    "mail.send",
+    "--client-timestamp",
+    "2026-09-24T18:00:00-07:00",
+    "--runtime-env",
+    runtimeEnv,
+  ];
+
+  await import("./index.js");
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+
+  expect(String(fetch.mock.calls[0]?.[0])).toBe("https://api.allowly.test/v1/check");
+});
+
+test("check rejects a client timestamp without a timezone before sending", async () => {
+  await configureCli();
+  vi.stubEnv("ALLOWLY_API_KEY", "runtime-secret");
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  process.argv = [
+    process.execPath,
+    "allowly",
+    "check",
+    "--authorization-id",
+    "auth_123",
+    "--action",
+    "mail.send",
+    "--client-timestamp",
+    "2026-09-24T18:00:00",
+  ];
+
+  await import("./index.js");
+  await vi.waitFor(() => expect(error).toHaveBeenCalledWith(
+    "--client-timestamp must be a valid timestamp with a timezone",
+  ));
+
+  expect(fetch).not.toHaveBeenCalled();
+});

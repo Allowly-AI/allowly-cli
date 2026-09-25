@@ -57,6 +57,16 @@ Use `--write-env` for local env-file output. `--env-file` is intentionally not d
 
 `allowly check` is a runtime helper. It requires a runtime API key from `--api-key`, `ALLOWLY_API_KEY`, or `--runtime-env`; it does not use the CLI setup credential. Receipt signing still happens server-side in the Allowly API.
 
+For an Auth0-bound authorization, keep the short-lived machine access token in
+`ALLOWLY_AGENT_TOKEN`, or select another environment variable with
+`--agent-token-var`. The CLI sends it only in `X-Allowly-Agent-Token`. Add an
+optional customer-reported event time with `--client-timestamp`; it must include
+a timezone and does not replace Allowly's receipt time.
+
+The CLI keeps `/v1/check` as a decision-only command. It does not currently
+provide managed execution or receipt-acknowledgment commands. Use an Allowly
+SDK, n8n, or Zapier for those flows.
+
 The command prints the runtime response unchanged. Signed receipts carry a
 `schema_version`; `alg` and `key_id` are signed top-level fields, and `signature` is the
 unpadded base64url string. Use an Allowly SDK verifier for offline verification.

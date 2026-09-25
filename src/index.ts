@@ -31,6 +31,7 @@ interface RuntimeKeyResponse {
 interface RuntimeConfig {
   apiUrl: string;
   accessToken: string;
+  agentToken?: string;
 }
 
 interface DeviceStartResponse {
@@ -75,7 +76,7 @@ Commands:
   allowly policies apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
   allowly setup guide
-  allowly check --authorization-id <id> --action <action> [--resource <resource>] [--runtime-env .env.local]
+  allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local]
 
 Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
@@ -568,7 +569,18 @@ async function runtimeConfigFromArgs(args: string[]): Promise<RuntimeConfig> {
   if (!accessToken) {
     throw new Error(`Missing runtime API key. Pass --api-key, set ${envVar}, or use --runtime-env .env.local.`);
   }
-  return { apiUrl, accessToken };
+  const agentTokenVar = option(args, "--agent-token-var") ?? "ALLOWLY_AGENT_TOKEN";
+  const agentToken = (runtimeEnv
+    ? await readRuntimeKeyFromEnvFile(runtimeEnv, agentTokenVar)
+    : undefined) ?? process.env[agentTokenVar];
+  return { apiUrl, accessToken, ...(agentToken ? { agentToken } : {}) };
+}
+
+function clientTimestamp(value: string): string {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new Error("--client-timestamp must be a valid timestamp with a timezone");
+  }
+  return value;
 }
 
 async function commandCheck(args: string[]): Promise<void> {
@@ -578,6 +590,7 @@ async function commandCheck(args: string[]): Promise<void> {
   if (actions.length === 0) throw new Error("Missing --action");
   const resource = option(args, "--resource");
   const sessionId = option(args, "--session-id");
+  const reportedAt = option(args, "--client-timestamp");
   const contextRaw = option(args, "--context");
   let context: Record<string, unknown> = {};
   if (contextRaw) {
@@ -602,8 +615,11 @@ async function commandCheck(args: string[]): Promise<void> {
       actions,
       ...(resource ? { resource } : {}),
       ...(sessionId ? { session_id: sessionId } : {}),
+      ...(reportedAt ? { client_timestamp: clientTimestamp(reportedAt) } : {}),
       context,
     },
+    30_000,
+    config.agentToken ? { "X-Allowly-Agent-Token": config.agentToken } : {},
   );
   console.log(JSON.stringify(result, null, 2));
 }
