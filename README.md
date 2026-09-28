@@ -86,8 +86,8 @@ optional customer-reported event time with `--client-timestamp`; it must include
 a timezone and does not replace Allowly's receipt time.
 
 The CLI keeps `/v1/check` as a decision-only command. It does not currently
-provide managed execution or receipt-acknowledgment commands. Use an Allowly
-SDK, n8n, or Zapier for those flows.
+provide execution or receipt-acknowledgment commands. Use an Allowly SDK for
+customer-side execution.
 
 The command prints the runtime response unchanged. Signed receipts carry a
 `schema_version`; `alg` and `key_id` are signed top-level fields, and `signature` is the
