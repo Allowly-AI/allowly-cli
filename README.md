@@ -57,6 +57,28 @@ Use `--write-env` for local env-file output. `--env-file` is intentionally not d
 
 `allowly check` is a runtime helper. It requires a runtime API key from `--api-key`, `ALLOWLY_API_KEY`, or `--runtime-env`; it does not use the CLI setup credential. Receipt signing still happens server-side in the Allowly API.
 
+## Set up witnessed execution
+
+After `allowly login`, install the Rust helper and pin this workspace's public
+witness key:
+
+```bash
+allowly setup witness --archive /path/to/allowly-witness-poc-0.1.0-<target>.tar.gz --sha256 <archive-sha256>
+```
+
+For a locally built helper, use `allowly setup witness --helper /absolute/path/to/allowly-witness-poc`.
+The CLI fetches only the public key, computes its SHA-256 fingerprint locally,
+and opens the authenticated workspace page. Compare the two full fingerprints
+and enter the one shown in the browser. A mismatch stops setup. The saved
+configuration contains the workspace ID, public key path, helper path, and
+fingerprint; it contains no setup credential or private key. The key and
+configuration are stored under `ALLOWLY_CONFIG_DIR` or `~/.allowly/witness/<workspace-id>/`.
+
+The release archives are being prepared. Until a published release manifest is
+pinned in the CLI, supply a local archive and its expected SHA-256 digest, or a
+helper built from the Rust project. The CLI checks the archive digest and accepts
+only the supported macOS and glibc Linux helper targets.
+
 For an Auth0-bound authorization, keep the short-lived machine access token in
 `ALLOWLY_AGENT_TOKEN`, or select another environment variable with
 `--agent-token-var`. The CLI sends it only in `X-Allowly-Agent-Token`. Add an

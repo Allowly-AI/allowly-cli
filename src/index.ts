@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { DEFAULT_API_URL, DEFAULT_APP_URL, configPath, readConfig, removeConfigIfCredentialMatches, writeConfig } from "./config.js";
 import { AllowlyCliError, apiRequest, listAll } from "./http.js";
+import { setupWitness } from "./witnessSetup.js";
 import {
   SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -76,6 +77,8 @@ Commands:
   allowly policies apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
   allowly setup guide
+  allowly setup witness --archive <release.tar.gz> --sha256 <archive-sha256>
+  allowly setup witness --helper <local-rust-helper>
   allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local]
 
 Optional use-case seeds:
@@ -314,6 +317,32 @@ Security boundary:
 - setup/login credentials configure actions, policies, and runtime keys.
 - runtime API keys create authorizations and call /v1/check.
 - the CLI does not sign receipts; the Allowly API signs receipts server-side.`);
+}
+
+async function commandSetupWitness(args: string[]): Promise<void> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("witness setup needs an interactive terminal to confirm the browser fingerprint");
+  }
+  const config = await readConfig();
+  const result = await setupWitness(config, {
+    archive: option(args, "--archive"),
+    archiveSha256: option(args, "--sha256"),
+    helper: option(args, "--helper"),
+    openBrowser,
+    confirmFingerprint: async (fingerprint, pageUrl, kmsKeyVersion) => {
+      console.log(`Workspace: ${config.workspaceId}; witness key version: ${kmsKeyVersion}`);
+      console.log(`Downloaded workspace witness key fingerprint: sha256:${fingerprint}`);
+      console.log(`Compare it with the authenticated workspace page: ${pageUrl}`);
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        return await rl.question("Enter the full fingerprint shown in your browser: ");
+      } finally {
+        rl.close();
+      }
+    },
+  });
+  console.log(`Witness setup complete for ${result.workspaceId}. Public key fingerprint: sha256:${result.fingerprintSha256}`);
+  console.log("The SDK will use the installed helper and public key for witnessed execution.");
 }
 
 function listUseCases(): void {
@@ -661,6 +690,7 @@ async function main(argv: string[]): Promise<void> {
   if (command === "status") return commandStatus();
   if (command === "init") return commandInit(argv.slice(1));
   if (command === "setup" && subcommand === "guide") return commandSetupGuide();
+  if (command === "setup" && subcommand === "witness") return commandSetupWitness(argv.slice(2));
   if (command === "actions" && subcommand === "apply") return commandActionsApply(action);
   if (command === "policies" && subcommand === "apply") return commandPoliciesApply(action);
   if (command === "keys" && subcommand === "create") return commandKeysCreate(argv.slice(2));
