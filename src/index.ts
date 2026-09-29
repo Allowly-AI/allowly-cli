@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { access, chmod, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { access, chmod, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { DEFAULT_API_URL, DEFAULT_APP_URL, configPath, readConfig, removeConfigIfCredentialMatches, writeConfig } from "./config.js";
 import { AllowlyCliError, apiRequest, listAll } from "./http.js";
+import { createNativeEnrollment, nativeAgentToken, nativeEnrollmentProof, type NativeAgentCredential, type PendingNativeEnrollment } from "./nativeIdentity.js";
 import { setupWitness } from "./witnessSetup.js";
 import {
   SETUP_TEMPLATE_ALIASES,
@@ -76,11 +78,13 @@ Commands:
   allowly actions apply <allowly.setup.json>
   allowly policies apply <allowly.setup.json>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
+  allowly agent enroll <agent-id> [--out <credential.json>] [--resume]
+  allowly agent remove <agent-id> [--key-id <key-id>] [--yes]
   allowly setup guide
   allowly setup witness --archive <release.tar.gz> --sha256 <archive-sha256>
   allowly setup witness --helper <local-rust-helper>
   allowly setup witness --helper <local-rust-helper> --witness-ca-cert <local-ca.pem>
-  allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local]
+  allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local] [--agent-credential <credential.json>]
 
 Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
@@ -91,6 +95,7 @@ Typical agent flow:
   allowly actions apply allowly.setup.json
   allowly policies apply allowly.setup.json
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
+  allowly agent enroll my-agent
 
 Runtime check flow:
   allowly check --authorization-id auth_... --action web.search --resource user:123 --runtime-env .env.local
@@ -215,6 +220,133 @@ async function commandStatus(): Promise<void> {
   const config = await readConfig();
   const status = await apiRequest<Record<string, unknown>>(config, "GET", "/v1/setup/status");
   console.log(JSON.stringify(status, null, 2));
+}
+
+interface AgentEnrollmentResponse {
+  key_id: string;
+  binding_id: string;
+  agent_id: string;
+  status: string;
+}
+
+async function commandAgentEnroll(agentId: string | undefined, args: string[]): Promise<void> {
+  if (!agentId || agentId.startsWith("--")) throw new Error("Provide an exact agent ID: allowly agent enroll <agent-id>");
+  const config = await readConfig();
+  let workspaceId = config.workspaceId;
+  if (!workspaceId) {
+    const status = await apiRequest<{ workspace_id?: unknown }>(config, "GET", "/v1/setup/status");
+    if (typeof status.workspace_id !== "string" || !status.workspace_id) throw new Error("Allowly did not return a workspace ID");
+    workspaceId = status.workspace_id;
+  }
+  const digest = createHash("sha256").update(JSON.stringify([workspaceId, agentId])).digest("hex").slice(0, 24);
+  const output = resolve(option(args, "--out") ?? join(dirname(configPath()), "agents", `${digest}.json`));
+  const resume = args.includes("--resume");
+  let pending: PendingNativeEnrollment;
+  if (resume) {
+    const value: unknown = JSON.parse(await readFile(output, "utf8"));
+    if (!value || typeof value !== "object") throw new Error("Agent credential file is invalid");
+    const saved = value as Partial<PendingNativeEnrollment> & Partial<NativeAgentCredential>;
+    if (saved.version === 1 && saved.provider === "allowly" && saved.workspace_id === workspaceId
+        && saved.agent_id === agentId && saved.key_id && saved.binding_id) {
+      console.log(`Agent credential is already saved at ${output}. Refresh the dashboard to check whether it is still active.`);
+      return;
+    }
+    if (saved.version !== 1 || saved.provider !== "allowly" || saved.status !== "pending"
+        || saved.workspace_id !== workspaceId || saved.agent_id !== agentId
+        || typeof saved.public_key !== "string" || !saved.public_key
+        || !saved.private_key_jwk || saved.private_key_jwk.x !== saved.public_key
+        || !saved.private_key_jwk.d) {
+      throw new Error("Pending credential does not match this workspace and agent");
+    }
+    pending = saved as PendingNativeEnrollment;
+  } else {
+    const created = createNativeEnrollment(workspaceId, agentId);
+    pending = {
+      version: 1,
+      provider: "allowly",
+      status: "pending",
+      workspace_id: workspaceId,
+      agent_id: agentId,
+      public_key: created.publicKey,
+      private_key_jwk: created.privateKeyJwk,
+    };
+    await mkdir(dirname(output), { recursive: true, mode: 0o700 });
+    await writeFile(output, JSON.stringify(pending, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    await chmod(output, 0o600);
+  }
+  const response = await apiRequest<AgentEnrollmentResponse>(config, "POST", "/v1/setup/agent-credentials", {
+    agent_id: agentId,
+    public_key: pending.public_key,
+    possession_proof: nativeEnrollmentProof(workspaceId, agentId, pending.public_key, pending.private_key_jwk),
+  });
+  if (!response.key_id || !response.binding_id || response.agent_id !== agentId || response.status !== "active") {
+    throw new Error("Allowly returned an invalid enrollment response. The pending key was kept; rerun with --resume.");
+  }
+  const credential: NativeAgentCredential = {
+    version: 1,
+    provider: "allowly",
+    workspace_id: workspaceId,
+    agent_id: agentId,
+    binding_id: response.binding_id,
+    key_id: response.key_id,
+    private_key_jwk: pending.private_key_jwk,
+  };
+  const completePath = `${output}.complete-${process.pid}-${randomUUID()}`;
+  try {
+    await writeFile(completePath, JSON.stringify(credential, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    await chmod(completePath, 0o600);
+    await rename(completePath, output);
+  } catch (err) {
+    await unlink(completePath).catch(() => {});
+    throw err;
+  }
+  console.log(`Agent ${agentId} enrolled. Credential saved to ${output}`);
+  console.log("Store this file with your agent secrets. Create a new authorization to use this identity.");
+}
+
+async function commandAgentRemove(agentId: string | undefined, args: string[]): Promise<void> {
+  if (!agentId || agentId.startsWith("--")) throw new Error("Provide an exact agent ID: allowly agent remove <agent-id>");
+  const config = await readConfig();
+  const listed = await apiRequest<{
+    agent_id: string;
+    credentials: Array<{ key_id: string; status: string }>;
+  }>(config, "GET", `/v1/setup/agent-credentials?${new URLSearchParams({ agent_id: agentId })}`);
+  if (!listed || listed.agent_id !== agentId || !Array.isArray(listed.credentials)
+      || listed.credentials.some((key) => !key || typeof key.key_id !== "string"
+        || !/^[A-Za-z0-9_-]+$/.test(key.key_id) || !["active", "revoked"].includes(key.status))) {
+    throw new Error("Allowly returned an invalid credential list; no credentials were revoked.");
+  }
+  const keyId = option(args, "--key-id");
+  if (args.includes("--key-id") && !keyId) throw new Error("Provide a key ID after --key-id");
+  if (keyId && !listed.credentials.some((key) => key.key_id === keyId)) {
+    throw new Error("That credential does not belong to this agent.");
+  }
+  const keys = listed.credentials.filter((key) => key.status === "active" && (!keyId || key.key_id === keyId));
+  if (!keys.length) {
+    console.log(`No active credentials to revoke for agent ${agentId}.`);
+    return;
+  }
+  console.log(`Revoke ${keys.length} credential(s) for agent ${agentId}: ${keys.map((key) => key.key_id).join(", ")}`);
+  console.log("Requests signed with these keys will stop working. Local credential files will be kept.");
+  if (!args.includes("--yes")) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      throw new Error("Confirmation required. Rerun with --yes to revoke these credentials.");
+    }
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      if ((await rl.question("Continue? [y/N] ")).trim().toLowerCase() !== "y") {
+        console.log("Cancelled; no credentials were revoked.");
+        return;
+      }
+    } finally {
+      rl.close();
+    }
+  }
+  for (const key of keys) {
+    await apiRequest(config, "DELETE", `/v1/setup/agent-credentials/${encodeURIComponent(key.key_id)}`);
+    console.log(`Revoked credential ${key.key_id}.`);
+  }
+  console.log("Local credential files were kept. If no active keys remain, re-enroll with a new --out path and create new authorizations.");
 }
 
 async function commandLogout(): Promise<void> {
@@ -604,7 +736,19 @@ async function runtimeConfigFromArgs(args: string[]): Promise<RuntimeConfig> {
   const agentToken = (runtimeEnv
     ? await readRuntimeKeyFromEnvFile(runtimeEnv, agentTokenVar)
     : undefined) ?? process.env[agentTokenVar];
-  return { apiUrl, accessToken, ...(agentToken ? { agentToken } : {}) };
+  const agentCredentialPath = option(args, "--agent-credential");
+  if (agentCredentialPath && agentToken) throw new Error("Use either --agent-credential or an agent token, not both");
+  let effectiveAgentToken = agentToken;
+  if (agentCredentialPath) {
+    let credential: NativeAgentCredential;
+    try {
+      credential = JSON.parse(await readFile(resolve(agentCredentialPath), "utf8")) as NativeAgentCredential;
+    } catch {
+      throw new Error("Could not read the Allowly agent credential file");
+    }
+    effectiveAgentToken = nativeAgentToken(credential);
+  }
+  return { apiUrl, accessToken, ...(effectiveAgentToken ? { agentToken: effectiveAgentToken } : {}) };
 }
 
 function clientTimestamp(value: string): string {
@@ -696,6 +840,8 @@ async function main(argv: string[]): Promise<void> {
   if (command === "actions" && subcommand === "apply") return commandActionsApply(action);
   if (command === "policies" && subcommand === "apply") return commandPoliciesApply(action);
   if (command === "keys" && subcommand === "create") return commandKeysCreate(argv.slice(2));
+  if (command === "agent" && subcommand === "enroll") return commandAgentEnroll(action, argv.slice(3));
+  if (command === "agent" && subcommand === "remove") return commandAgentRemove(action, argv.slice(3));
   if (command === "check") return commandCheck(argv.slice(1));
   throw new Error(`Unknown command.\n\n${usage()}`);
 }
