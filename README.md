@@ -56,12 +56,16 @@ Runtime API keys are shown once. Write them to local env files or a secret manag
 
 ## Enroll an agent
 
-After creating the agent's policy, run `allowly agent enroll <exact-agent-id>`
+Create the agent in the dashboard, then run `allowly agent enroll <exact-agent-id>`
 with your Allowly CLI login. The command creates an Ed25519 signing key on this
 machine, registers only its public key with Allowly, and saves the private
 credential in an owner-only file under `~/.allowly/agents/` (or
 `ALLOWLY_CONFIG_DIR/agents/`). Use `--out /path/to/agent.json` to choose the
 location. The command prints that path, never the private key.
+
+You can enroll a dashboard agent before creating its policy. CLI-only setups
+can still enroll after creating a live policy. Enrollment does not grant
+permission: define the policy and create a new authorization before runtime use.
 
 The private credential must be available to the trusted process that runs the
 agent. Move it using your usual secret-management process if enrollment and
