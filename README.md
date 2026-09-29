@@ -67,6 +67,12 @@ allowly setup witness --archive /path/to/allowly-witness-poc-0.1.0-<target>.tar.
 ```
 
 For a locally built helper, use `allowly setup witness --helper /absolute/path/to/allowly-witness-poc`.
+For the local development bridge, add `--witness-ca-cert /absolute/path/to/ca.pem`.
+The CLI copies that local CA certificate into the workspace's witness setup and
+pins its SHA-256 fingerprint. Both SDKs check the pinned certificate before
+starting the helper. This option affects only the witness socket; provider
+HTTPS continues to use normal public certificate authorities. Production
+witness URLs with publicly trusted certificates do not need this option.
 The CLI fetches only the public key, computes its SHA-256 fingerprint locally,
 and opens the authenticated workspace page. Compare the two full fingerprints
 and enter the one shown in the browser. A mismatch stops setup. The saved

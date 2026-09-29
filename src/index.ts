@@ -79,6 +79,7 @@ Commands:
   allowly setup guide
   allowly setup witness --archive <release.tar.gz> --sha256 <archive-sha256>
   allowly setup witness --helper <local-rust-helper>
+  allowly setup witness --helper <local-rust-helper> --witness-ca-cert <local-ca.pem>
   allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local]
 
 Optional use-case seeds:
@@ -328,6 +329,7 @@ async function commandSetupWitness(args: string[]): Promise<void> {
     archive: option(args, "--archive"),
     archiveSha256: option(args, "--sha256"),
     helper: option(args, "--helper"),
+    witnessCaCert: option(args, "--witness-ca-cert"),
     openBrowser,
     confirmFingerprint: async (fingerprint, pageUrl, kmsKeyVersion) => {
       console.log(`Workspace: ${config.workspaceId}; witness key version: ${kmsKeyVersion}`);

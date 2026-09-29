@@ -23,6 +23,7 @@ export interface WitnessSetupOptions {
   archive?: string;
   archiveSha256?: string;
   helper?: string;
+  witnessCaCert?: string;
   openBrowser: (url: string) => boolean;
   confirmFingerprint: (localFingerprint: string, pageUrl: string, kmsKeyVersion: string) => Promise<string>;
 }
@@ -169,6 +170,18 @@ export async function setupWitness(config: CliConfig, options: WitnessSetupOptio
       throw new Error(`witness archive must be named ${expectedName}`);
     }
   }
+  // A local witness uses a private CA. Keep that trust separate from the
+  // public Web PKI used for the provider request.
+  let witnessCaBytes: Buffer | undefined;
+  if (options.witnessCaCert !== undefined) {
+    const source = resolve(options.witnessCaCert);
+    if (!(await lstat(source)).isFile()) throw new Error("witness CA certificate must be a regular file");
+    witnessCaBytes = await readFile(source);
+    if (witnessCaBytes.length < 1 || witnessCaBytes.length > 32 * 1024
+        || !witnessCaBytes.toString("ascii").includes("-----BEGIN CERTIFICATE-----")) {
+      throw new Error("witness CA certificate is not a valid PEM file");
+    }
+  }
   const key = await apiRequest<WitnessKeyResponse>(
     { ...config, apiUrl: config.apiUrl }, "GET", "/v1/setup/witness-key",
   );
@@ -191,12 +204,21 @@ export async function setupWitness(config: CliConfig, options: WitnessSetupOptio
   await mkdir(workspaceDirectory, { recursive: true, mode: 0o700 });
   const trustedNotaryKeyPath = join(workspaceDirectory, "notary-public-key.json");
   await atomicWrite(trustedNotaryKeyPath, Buffer.from(JSON.stringify(key.public_key) + "\n"), 0o600);
+  const trustedWitnessCaPath = witnessCaBytes === undefined
+    ? undefined : join(workspaceDirectory, "witness-ca.pem");
+  if (trustedWitnessCaPath !== undefined) {
+    await atomicWrite(trustedWitnessCaPath, witnessCaBytes!, 0o600);
+  }
   await atomicWrite(join(workspaceDirectory, "config.json"), Buffer.from(JSON.stringify({
     version: 1,
     workspaceId,
     trustedNotaryKeyPath,
     nativeBinaryPath,
     fingerprintSha256: fingerprint,
+    ...(trustedWitnessCaPath === undefined ? {} : {
+      trustedWitnessCaPath,
+      witnessCaFingerprintSha256: createHash("sha256").update(witnessCaBytes!).digest("hex"),
+    }),
   }, null, 2) + "\n"), 0o600);
   return { workspaceId, fingerprintSha256: fingerprint, nativeBinaryPath, trustedNotaryKeyPath };
 }

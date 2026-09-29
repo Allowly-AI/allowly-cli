@@ -74,6 +74,22 @@ test("requires the browser fingerprint before pinning the workspace key", async 
   expect((await stat(result.nativeBinaryPath)).mode & 0o777).toBe(0o700);
 });
 
+test("pins a local witness CA separately from the workspace witness key", async () => {
+  const { directory, helper, fingerprint, config } = await fixture();
+  const ca = Buffer.from("-----BEGIN CERTIFICATE-----\nlocal-test-ca\n-----END CERTIFICATE-----\n");
+  const source = join(directory, "local-ca.pem");
+  await writeFile(source, ca);
+  await setupWitness(config, {
+    helper, witnessCaCert: source, openBrowser: () => true,
+    confirmFingerprint: async () => fingerprint,
+  });
+  const saved = JSON.parse(await readFile(join(directory, "witness", "ws_test", "config.json"), "utf8"));
+  expect(saved.trustedWitnessCaPath).toBe(join(directory, "witness", "ws_test", "witness-ca.pem"));
+  expect(saved.witnessCaFingerprintSha256).toBe(createHash("sha256").update(ca).digest("hex"));
+  expect(await readFile(saved.trustedWitnessCaPath)).toEqual(ca);
+  expect((await stat(saved.trustedWitnessCaPath)).mode & 0o777).toBe(0o600);
+});
+
 test("wrong browser fingerprint leaves no pinned config or installed helper", async () => {
   const { directory, helper, config } = await fixture();
   await expect(setupWitness(config, {
