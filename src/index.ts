@@ -86,6 +86,7 @@ Commands:
   allowly setup witness --archive <release.tar.gz> --sha256 <archive-sha256>
   allowly setup witness --helper <local-rust-helper>
   allowly setup witness --helper <local-rust-helper> --witness-ca-cert <local-ca.pem>
+  allowly setup witness --helper <local-rust-helper> --app-url <dashboard-url>
   allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local] [--agent-credential <credential.json>]
 
 Optional use-case seeds:
@@ -206,6 +207,7 @@ async function commandLogin(args: string[]): Promise<void> {
     await writeConfig({
       apiUrl: configuredApiUrl,
       appUrl,
+      dashboardUrl: new URL(device.verification_uri).origin,
       accessToken: authorized.access_token,
       expiresAt: authorized.expires_at,
       workspaceId: authorized.workspace_id,
@@ -455,7 +457,7 @@ Security boundary:
 }
 
 async function commandSetupWitness(args: string[]): Promise<void> {
-  const valueFlags = new Set(["--archive", "--sha256", "--helper", "--witness-ca-cert"]);
+  const valueFlags = new Set(["--archive", "--sha256", "--helper", "--witness-ca-cert", "--app-url"]);
   const seen = new Set<string>();
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
@@ -471,6 +473,7 @@ async function commandSetupWitness(args: string[]): Promise<void> {
   }
   const config = await readConfig();
   const result = await setupWitness(config, {
+    appUrl: option(args, "--app-url"),
     archive: option(args, "--archive"),
     archiveSha256: option(args, "--sha256"),
     helper: option(args, "--helper"),

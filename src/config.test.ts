@@ -72,6 +72,30 @@ test("readConfig still accepts old manual setup-token config", async () => {
   });
 });
 
+test("dashboard URL is optional and stays separate from the app API URL", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "allowly-cli-dashboard-"));
+  dirs.push(dir);
+  const path = join(dir, "config.json");
+  await writeConfig({
+    apiUrl: "http://127.0.0.1:8085",
+    appUrl: "http://127.0.0.1:8480",
+    dashboardUrl: "https://localhost:8843",
+    accessToken: "test-setup-secret",
+  }, path);
+
+  expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+    apiUrl: "http://127.0.0.1:8085",
+    appUrl: "http://127.0.0.1:8480",
+    dashboardUrl: "https://localhost:8843",
+    accessToken: "test-setup-secret",
+  });
+  await expect(readConfig(path)).resolves.toMatchObject({
+    appUrl: "http://127.0.0.1:8480",
+    dashboardUrl: "https://localhost:8843",
+  });
+  expect((await stat(path)).mode & 0o777).toBe(0o600);
+});
+
 test("readConfig explains corrupt JSON", async () => {
   const dir = await mkdtemp(join(tmpdir(), "allowly-cli-"));
   dirs.push(dir);

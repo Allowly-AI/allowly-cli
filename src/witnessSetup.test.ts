@@ -90,6 +90,66 @@ test("pins a local witness CA separately from the workspace witness key", async 
   expect((await stat(saved.trustedWitnessCaPath)).mode & 0o777).toBe(0o600);
 });
 
+test.each([
+  ["saved dashboard", "https://dashboard.allowly.test", undefined, "https://dashboard.allowly.test"],
+  ["browser override", "https://dashboard.allowly.test", "https://localhost:8843", "https://localhost:8843"],
+  ["legacy app URL", undefined, undefined, "http://127.0.0.1:8480"],
+] as const)("uses %s only for the browser link", async (_name, dashboardUrl, appUrl, expectedOrigin) => {
+  const { directory, helper, fingerprint, config, fetch } = await fixture();
+  const selected = {
+    ...config, appUrl: "http://127.0.0.1:8480",
+    ...(dashboardUrl === undefined ? {} : { dashboardUrl }),
+  };
+  const before = JSON.stringify(selected);
+  const loginPath = join(directory, "config.json");
+  await writeFile(loginPath, before, { mode: 0o600 });
+  const opened = vi.fn(() => true);
+  const confirmed = vi.fn(async () => fingerprint);
+  await setupWitness(selected, { helper, appUrl, openBrowser: opened, confirmFingerprint: confirmed });
+  expect(opened).toHaveBeenCalledWith(`${expectedOrigin}/witness-key?workspace_id=ws_test`);
+  expect(confirmed).toHaveBeenCalledWith(
+    fingerprint, `${expectedOrigin}/witness-key?workspace_id=ws_test`, "projects/test/cryptoKeyVersions/1",
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(selected)).toBe(before);
+  expect(await readFile(loginPath, "utf8")).toBe(before);
+});
+
+test("browser override cannot bypass fingerprint confirmation", async () => {
+  const { directory, helper, config } = await fixture();
+  const opened = vi.fn(() => true);
+  await expect(setupWitness(config, {
+    helper, appUrl: "https://localhost:8843", openBrowser: opened,
+    confirmFingerprint: async () => "0".repeat(64),
+  })).rejects.toThrow("browser fingerprint was not confirmed");
+  expect(opened).toHaveBeenCalledWith("https://localhost:8843/witness-key?workspace_id=ws_test");
+  await expect(readFile(join(directory, "witness", "ws_test", "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(readFile(join(directory, "bin", `allowly-witness-poc-0.1.0-${witnessTarget()}`))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test.each([
+  "javascript:alert(1)", "file:///private/tmp/dashboard", "https://user:password@dashboard.allowly.test",
+])("rejects unsafe browser base %s before helper or API side effects", async (appUrl) => {
+  const { directory, helper, config, fetch } = await fixture();
+  // If helper validation ran first, its failure would hide the bad URL.
+  await writeFile(helper, "#!/bin/sh\nexit 1\n");
+  const opened = vi.fn(() => true);
+  const confirmed = vi.fn(async () => "unused");
+  let failure: unknown;
+  try {
+    await setupWitness(config, { helper, appUrl, openBrowser: opened, confirmFingerprint: confirmed });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).not.toContain("command failed");
+  expect((failure as Error).message).toMatch(/url|http|browser|dashboard/i);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(opened).not.toHaveBeenCalled();
+  expect(confirmed).not.toHaveBeenCalled();
+  await expect(readFile(join(directory, "witness", "ws_test", "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 test("wrong browser fingerprint leaves no pinned config or installed helper", async () => {
   const { directory, helper, config } = await fixture();
   await expect(setupWitness(config, {

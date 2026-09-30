@@ -35,6 +35,11 @@ Use `allowly init --use-case email-agent` instead when you want a built-in seed 
 
 `allowly login` talks to the dashboard app for browser approval and stores the public API URL returned by Allowly for setup calls. Use `--app-url` for local app development and `--api-url` only when you need to override the API URL written to the local CLI config.
 
+Login saves the browser dashboard origin returned by Allowly separately from
+the control-plane API address. For example, a local login can use
+`http://127.0.0.1:8480` for API requests while browser pages open at
+`https://localhost:8843`.
+
 ## Optional use-case seeds
 
 ```bash
@@ -144,6 +149,11 @@ pins its SHA-256 fingerprint. Both SDKs check the pinned certificate before
 starting the helper. This option affects only the witness socket; provider
 HTTPS continues to use normal public certificate authorities. Production
 witness URLs with publicly trusted certificates do not need this option.
+
+If an older CLI config points browser pages at the backend API, add
+`--app-url https://localhost:8843` to witness setup. This overrides only the
+browser page for that run; API addresses and saved CLI credentials are unchanged.
+
 The CLI fetches only the public key, computes its SHA-256 fingerprint locally,
 and opens the authenticated workspace page. Compare the two full fingerprints
 and enter the one shown in the browser. A mismatch stops setup. The saved

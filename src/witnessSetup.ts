@@ -17,6 +17,7 @@ interface WitnessKeyResponse {
 }
 
 export interface WitnessSetupOptions extends WitnessInstallOptions {
+  appUrl?: string;
   witnessCaCert?: string;
   openBrowser: (url: string) => boolean;
   confirmFingerprint: (localFingerprint: string, pageUrl: string, kmsKeyVersion: string) => Promise<string>;
@@ -97,6 +98,11 @@ export async function setupWitness(config: CliConfig, options: WitnessSetupOptio
 }> {
   if (!config.workspaceId) throw new Error("Run `allowly login` to select a workspace first");
   const workspaceId = safeWorkspaceId(config.workspaceId);
+  const dashboard = new URL(options.appUrl ?? config.dashboardUrl ?? config.appUrl ?? DEFAULT_APP_URL);
+  if (!["http:", "https:"].includes(dashboard.protocol) || dashboard.username || dashboard.password) {
+    throw new Error("witness dashboard URL must use HTTP or HTTPS without embedded credentials");
+  }
+  const pageUrl = new URL(`/witness-key?workspace_id=${encodeURIComponent(workspaceId)}`, dashboard).toString();
   // Source selection must be valid before making a remote request or asking for trust.
   const target = witnessTarget();
   validateWitnessSource(options, target);
@@ -124,7 +130,6 @@ export async function setupWitness(config: CliConfig, options: WitnessSetupOptio
   if (key.fingerprint_sha256 !== `sha256:${fingerprint}`) {
     throw new Error("workspace witness key fingerprint does not match the public key");
   }
-  const pageUrl = new URL(`/witness-key?workspace_id=${encodeURIComponent(workspaceId)}`, config.appUrl ?? DEFAULT_APP_URL).toString();
   options.openBrowser(pageUrl);
   const entered = (await options.confirmFingerprint(fingerprint, pageUrl, key.kms_key_version))
     .trim().toLowerCase().replace(/^sha256:/, "");

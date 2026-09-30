@@ -45,6 +45,84 @@ test.each([
   expect(log).toHaveBeenCalledWith(expect.stringContaining("Allowly CLI"));
 });
 
+test("login saves the dashboard origin without replacing the app API transport", async () => {
+  const configFile = await configureCli();
+  const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url) === "http://127.0.0.1:8480/v1/cli/device/start") {
+      expect(JSON.parse(String(init?.body))).toEqual({});
+      return new Response(JSON.stringify({
+        device_code: "test-device-secret", user_code: "TEST-CODE",
+        verification_uri: "https://localhost:8843/cli/authorize?source=cli",
+        verification_uri_complete: "https://localhost:8843/cli/authorize?source=cli&user_code=TEST-CODE",
+        expires_in: 60, interval: 1,
+      }));
+    }
+    expect(String(url)).toBe("http://127.0.0.1:8480/v1/cli/device/token");
+    expect(JSON.parse(String(init?.body))).toEqual({ device_code: "test-device-secret" });
+    return new Response(JSON.stringify({
+      status: "authorized", access_token: "test-authorized-secret", expires_at: "2026-10-01T00:00:00Z",
+      api_url: "http://127.0.0.1:8085", workspace_id: "ws_test", workspace_name: "Test",
+    }));
+  });
+  vi.stubGlobal("fetch", fetch);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "login", "--app-url", "http://127.0.0.1:8480", "--no-browser"];
+
+  await import("./index.js");
+  await vi.waitFor(() => expect(log).toHaveBeenCalledWith(
+    "Allowly CLI configured for Test (http://127.0.0.1:8085)",
+  ), { timeout: 2500 });
+
+  const raw = await readFile(configFile, "utf8");
+  expect(JSON.parse(raw)).toEqual({
+    apiUrl: "http://127.0.0.1:8085", appUrl: "http://127.0.0.1:8480", dashboardUrl: "https://localhost:8843",
+    accessToken: "test-authorized-secret", expiresAt: "2026-10-01T00:00:00Z",
+    workspaceId: "ws_test", workspaceName: "Test",
+  });
+  for (const browserOnlyValue of ["/cli/authorize", "source=cli", "TEST-CODE", "test-device-secret"]) {
+    expect(raw).not.toContain(browserOnlyValue);
+  }
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("witness setup forwards the browser-only app URL override without saving it", async () => {
+  const configFile = await configureCli();
+  const before = await readFile(configFile, "utf8");
+  const witness = await import("./witnessSetup.js");
+  const setup = vi.spyOn(witness, "setupWitness").mockResolvedValue({
+    workspaceId: "ws_test", fingerprintSha256: "0".repeat(64),
+    nativeBinaryPath: "/test/helper", trustedNotaryKeyPath: "/test/public-key.json",
+  });
+  const fetch = vi.fn(() => { throw new Error("unexpected network access"); });
+  vi.stubGlobal("fetch", fetch);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const stdinTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const stdoutTTY = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+  Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: true });
+  Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
+  process.argv = [
+    process.execPath, "allowly", "setup", "witness", "--helper", "/test/helper",
+    "--app-url", "https://localhost:8843",
+  ];
+  try {
+    await import("./index.js");
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith(
+      "Witness setup complete for ws_test. Public key fingerprint: sha256:" + "0".repeat(64),
+    ));
+    expect(setup).toHaveBeenCalledWith(
+      expect.objectContaining({ apiUrl: "https://api.allowly.test", accessToken: "setup-secret" }),
+      expect.objectContaining({ appUrl: "https://localhost:8843", helper: "/test/helper" }),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await readFile(configFile, "utf8")).toBe(before);
+  } finally {
+    if (stdinTTY) Object.defineProperty(process.stdin, "isTTY", stdinTTY);
+    else delete (process.stdin as { isTTY?: boolean }).isTTY;
+    if (stdoutTTY) Object.defineProperty(process.stdout, "isTTY", stdoutTTY);
+    else delete (process.stdout as { isTTY?: boolean }).isTTY;
+  }
+});
+
 test("logout revokes the server credential before removing local config", async () => {
   const configFile = await configureCli();
   const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
