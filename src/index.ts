@@ -81,6 +81,8 @@ Commands:
   allowly agent enroll <agent-id> [--out <credential.json>] [--resume]
   allowly agent remove <agent-id> [--key-id <key-id>] [--yes]
   allowly setup guide
+  allowly setup witness
+  allowly setup witness --build-from-source
   allowly setup witness --archive <release.tar.gz> --sha256 <archive-sha256>
   allowly setup witness --helper <local-rust-helper>
   allowly setup witness --helper <local-rust-helper> --witness-ca-cert <local-ca.pem>
@@ -453,6 +455,17 @@ Security boundary:
 }
 
 async function commandSetupWitness(args: string[]): Promise<void> {
+  const valueFlags = new Set(["--archive", "--sha256", "--helper", "--witness-ca-cert"]);
+  const seen = new Set<string>();
+  for (let index = 0; index < args.length; index++) {
+    const flag = args[index];
+    if (seen.has(flag) || (!valueFlags.has(flag) && flag !== "--build-from-source")) throw new Error(`unknown or repeated witness setup option: ${flag}`);
+    seen.add(flag);
+    if (valueFlags.has(flag)) {
+      if (!args[index + 1] || args[index + 1].startsWith("--")) throw new Error(`${flag} requires a value`);
+      index++;
+    }
+  }
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error("witness setup needs an interactive terminal to confirm the browser fingerprint");
   }
@@ -461,6 +474,7 @@ async function commandSetupWitness(args: string[]): Promise<void> {
     archive: option(args, "--archive"),
     archiveSha256: option(args, "--sha256"),
     helper: option(args, "--helper"),
+    buildFromSource: args.includes("--build-from-source"),
     witnessCaCert: option(args, "--witness-ca-cert"),
     openBrowser,
     confirmFingerprint: async (fingerprint, pageUrl, kmsKeyVersion) => {

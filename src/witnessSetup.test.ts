@@ -130,3 +130,25 @@ test("rejects an archive whose SHA-256 does not match before saving trust", asyn
   })).rejects.toThrow("archive SHA-256 mismatch");
   await expect(readFile(join(directory, "witness", "ws_test", "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
 });
+
+test("source selection failures do not make API requests or save configuration", async () => {
+  const { directory, helper, config, fetch } = await fixture();
+  const confirmFingerprint = vi.fn();
+  await expect(setupWitness(config, {
+    helper, buildFromSource: true, openBrowser: () => true, confirmFingerprint,
+  })).rejects.toThrow("cannot be combined");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(confirmFingerprint).not.toHaveBeenCalled();
+  await expect(readFile(join(directory, "witness", "ws_test", "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("a helper that fails validation is never installed or used for trust setup", async () => {
+  const { directory, helper, config, fetch } = await fixture();
+  await writeFile(helper, "#!/bin/sh\nexit 1\n");
+  await expect(setupWitness(config, {
+    helper, openBrowser: () => true, confirmFingerprint: async () => "unused",
+  })).rejects.toThrow("command failed");
+  expect(fetch).not.toHaveBeenCalled();
+  await expect(readFile(join(directory, "bin", `allowly-witness-poc-0.1.0-${witnessTarget()}`))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(readFile(join(directory, "witness", "ws_test", "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+});

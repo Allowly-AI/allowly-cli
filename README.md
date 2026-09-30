@@ -103,14 +103,41 @@ controls under the agent's **Integrate** page.
 
 ## Set up witnessed execution
 
-After `allowly login`, install the Rust helper and pin this workspace's public
-witness key:
+After `allowly login`, install the native Rust helper on the host that sends
+provider requests and pin this workspace's public witness key. Choose either:
+
+```bash
+# Download the verified precompiled helper; no Rust toolchain needed.
+allowly setup witness
+
+# Download reviewed adapter source and build it with pinned official TLSNotary.
+allowly setup witness --build-from-source
+```
+
+The source option needs Rust 1.95.0, Cargo, Git, Bash, and a native C build
+toolchain. It downloads Allowly's adapter source, then fetches unchanged
+TLSNotary libraries from the official `tlsnotary/tlsn` repository, pinned to
+`v0.1.0-alpha.15` / `47aee45b53e06648c1b2ad3689b367b8c923fdec`.
+The executable implements Allowly's protocol around those libraries; it is not
+a renamed upstream TLSNotary executable.
+
+Both automatic paths use the `witness-v0.1.0` release in
+`Allowly-AI/allowly-mcp`. The CLI verifies the pinned SHA-256 digest of
+`SHA256SUMS`, then the selected archive. Reviewed release assets are not
+published yet, and the CLI manifest digest is not pinned, so both paths
+currently stop with a clear error. They never use an unverified download or
+silently switch install modes.
+
+Offline options remain available:
 
 ```bash
 allowly setup witness --archive /path/to/allowly-witness-poc-0.1.0-<target>.tar.gz --sha256 <archive-sha256>
+allowly setup witness --helper /absolute/path/to/allowly-witness-poc
 ```
 
-For a locally built helper, use `allowly setup witness --helper /absolute/path/to/allowly-witness-poc`.
+Use only a helper you built or reviewed yourself with `--helper`; this option
+does not establish its source authenticity. The archive option checks the
+expected SHA-256 digest you supply. Choose one source option per setup command.
 For the local development bridge, add `--witness-ca-cert /absolute/path/to/ca.pem`.
 The CLI copies that local CA certificate into the workspace's witness setup and
 pins its SHA-256 fingerprint. Both SDKs check the pinned certificate before
@@ -124,10 +151,12 @@ configuration contains the workspace ID, public key path, helper path, and
 fingerprint; it contains no setup credential or private key. The key and
 configuration are stored under `ALLOWLY_CONFIG_DIR` or `~/.allowly/witness/<workspace-id>/`.
 
-The release archives are being prepared. Until a published release manifest is
-pinned in the CLI, supply a local archive and its expected SHA-256 digest, or a
-helper built from the Rust project. The CLI checks the archive digest and accepts
-only the supported macOS and glibc Linux helper targets.
+Supported hosts are macOS and glibc Linux on arm64 or x64; Windows and musl
+Linux are not supported by this installer. The helper and Witness Bridge source
+both live in `allowly_mcp/witness`. Customers install one `@allowly/mcp`
+package for receipt or witnessed mode. The CLI installs only the optional
+helper, not a second MCP package. The Witness Bridge is Allowly's hosted
+witnessing socket/service; setup does not download or start that server.
 
 For an existing Auth0-bound authorization, keep the short-lived machine access token in
 `ALLOWLY_AGENT_TOKEN`, or select another environment variable with
