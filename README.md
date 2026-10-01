@@ -126,17 +126,18 @@ TLSNotary libraries from the official `tlsnotary/tlsn` repository, pinned to
 The executable implements Allowly's protocol around those libraries; it is not
 a renamed upstream TLSNotary executable.
 
-Both automatic paths use the `witness-v0.1.0` release in
-`Allowly-AI/allowly-mcp`. The CLI verifies the pinned SHA-256 digest of
-`SHA256SUMS`, then the selected archive. Reviewed release assets are not
-published yet, and the CLI manifest digest is not pinned, so both paths
-currently stop with a clear error. They never use an unverified download or
-silently switch install modes.
+Both automatic paths use the published experimental
+[`witness-v0.1.1` release](https://github.com/Allowly-AI/allowly-mcp/releases/tag/witness-v0.1.1).
+The CLI verifies the pinned SHA-256 digest of `SHA256SUMS`, then the selected
+archive. They never use an unverified download or silently switch install
+modes. Native release checks ran on Ubuntu 22.04 (glibc 2.35) on x64 and ARM64,
+and macOS 15 on Intel and Apple Silicon. Compatibility below these tested
+baselines is not claimed.
 
 Offline options remain available:
 
 ```bash
-allowly setup witness --archive /path/to/allowly-witness-poc-0.1.0-<target>.tar.gz --sha256 <archive-sha256>
+allowly setup witness --archive /path/to/allowly-witness-poc-0.1.1-<target>.tar.gz --sha256 <archive-sha256>
 allowly setup witness --helper /absolute/path/to/allowly-witness-poc
 ```
 

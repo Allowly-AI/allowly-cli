@@ -180,7 +180,7 @@ test("rejects a malformed or different workspace key before confirmation", async
 
 test("rejects an archive whose SHA-256 does not match before saving trust", async () => {
   const { directory, fingerprint, config } = await fixture();
-  const archive = join(directory, `allowly-witness-poc-0.1.0-${witnessTarget()}.tar.gz`);
+  const archive = join(directory, `allowly-witness-poc-0.1.1-${witnessTarget()}.tar.gz`);
   await writeFile(archive, "wrong archive bytes");
   await expect(setupWitness(config, {
     archive,
