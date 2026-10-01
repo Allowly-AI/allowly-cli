@@ -6,6 +6,7 @@ import { gzipSync } from "node:zlib";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { HELPER_NAME, prepareWitnessHelper, validateWitnessSource } from "./witnessInstaller.js";
+import { WITNESS_RELEASE } from "./witnessRelease.js";
 import { witnessTarget } from "./witnessSetup.js";
 
 const target = "aarch64-apple-darwin";
@@ -63,6 +64,14 @@ function releaseFixture(archive = tar([[HELPER_NAME, helper]]), filename = binar
   });
   return { archive, manifest, release, fetchRelease };
 }
+
+test("pins the published helper release defaults", () => {
+  expect(WITNESS_RELEASE).toEqual({
+    version: "0.1.1",
+    baseUrl: "https://github.com/Allowly-AI/allowly-mcp/releases/download/witness-v0.1.1/",
+    manifestSha256: "969ab8e5cc2654e52cb2336c39d116480941acc13c563d98cecde62de440cc5a",
+  });
+});
 
 test("downloads the pinned manifest and verifies the compiled helper before returning bytes", async () => {
   const fixture = releaseFixture();
@@ -221,7 +230,7 @@ test("preserves offline archive installation without release requests", async ()
   const directory = await mkdtemp(join(tmpdir(), "allowly-witness-archive-test-"));
   directories.push(directory);
   const archive = tar([[HELPER_NAME, helper]]);
-  const path = join(directory, binaryName);
+  const path = join(directory, `${HELPER_NAME}-${WITNESS_RELEASE.version}-${target}.tar.gz`);
   await writeFile(path, archive);
   const fetchRelease = vi.fn();
   expect(await prepareWitnessHelper({ archive: path, archiveSha256: sha256(archive) }, target, { fetch: fetchRelease })).toEqual(helper);
