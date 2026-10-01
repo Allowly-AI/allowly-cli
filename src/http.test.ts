@@ -38,3 +38,22 @@ test("apiRequest reports non-JSON API errors by status", async () => {
   });
   expect((fetch.mock.calls[0]?.[1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
 });
+
+test("apiRequest redacts an agent token echoed by an error response", async () => {
+  const token = "sensitive-agent-token";
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    error: { code: `agent_token_invalid_${token}`, message: `invalid ${token} runtime-secret` },
+  }), { status: 401 })));
+
+  await expect(apiRequest(
+    { apiUrl: "https://api.allowly.ai", accessToken: "runtime-secret" },
+    "POST",
+    "/v1/check",
+    {},
+    30_000,
+    { "X-Allowly-Agent-Token": token },
+  )).rejects.toMatchObject({
+    code: "agent_token_invalid_[REDACTED]",
+    message: "invalid [REDACTED] [REDACTED]",
+  });
+});
