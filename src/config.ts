@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -53,24 +53,29 @@ export async function readConfig(path = configPath()): Promise<CliConfig> {
 
 export async function writeConfig(config: CliConfig, path = configPath()): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(
-    path,
-    JSON.stringify(
-      {
-        apiUrl: config.apiUrl.replace(/\/$/, ""),
-        appUrl: config.appUrl?.replace(/\/$/, ""),
-        dashboardUrl: config.dashboardUrl?.replace(/\/$/, ""),
-        accessToken: config.accessToken,
-        expiresAt: config.expiresAt,
-        workspaceId: config.workspaceId,
-        workspaceName: config.workspaceName,
-      },
-      null,
-      2,
-    ) + "\n",
-    { mode: 0o600 },
-  );
-  await chmod(path, 0o600);
+  const temporary = `${path}.${process.pid}-${randomUUID()}`;
+  try {
+    await writeFile(
+      temporary,
+      JSON.stringify(
+        {
+          apiUrl: config.apiUrl.replace(/\/$/, ""),
+          appUrl: config.appUrl?.replace(/\/$/, ""),
+          dashboardUrl: config.dashboardUrl?.replace(/\/$/, ""),
+          accessToken: config.accessToken,
+          expiresAt: config.expiresAt,
+          workspaceId: config.workspaceId,
+          workspaceName: config.workspaceName,
+        },
+        null,
+        2,
+      ) + "\n",
+      { flag: "wx", mode: 0o600 },
+    );
+    await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
 }
 
 export async function removeConfig(path = configPath()): Promise<boolean> {
