@@ -30,7 +30,7 @@
     "@types/node": "^20.19.40",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "license": "MIT"
 }
