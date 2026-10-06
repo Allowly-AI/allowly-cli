@@ -57,3 +57,15 @@ test("apiRequest redacts an agent token echoed by an error response", async () =
     message: "invalid [REDACTED] [REDACTED]",
   });
 });
+
+test.each([
+  "setup-secret-example", '{"access_token":"setup-secret-example"',
+])("apiRequest hides malformed successful response bodies: %s", async (body) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 201 })));
+
+  await expect(apiRequest(
+    { apiUrl: "https://app.allowly.ai", accessToken: "recovery-proof" },
+    "POST",
+    "/v1/agent-trials",
+  )).rejects.toMatchObject({ message: "Allowly API returned invalid JSON", status: 201 });
+});

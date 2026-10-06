@@ -30,6 +30,41 @@ async function configureCli(): Promise<string> {
   return join(configDir, "config.json");
 }
 
+test.each(["create", "recover"])("trial %s never prints a malformed bootstrap body", async (command) => {
+  const configDir = await mkdtemp(join(tmpdir(), "allowly-cli-trial-"));
+  tempDirs.push(configDir);
+  vi.stubEnv("ALLOWLY_CONFIG_DIR", configDir);
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  if (command === "recover") {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      trial_id: "trial_test", account_id: "acct_test", workspace_id: "ws_test", workspace_name: "Trial",
+      api_url: "https://api.allowly.test", access_token: "existing-setup-secret", token_type: "Bearer",
+      expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      claim_url: "https://app.allowly.ai/claim/trial_test#token=" + "c".repeat(43),
+      status_url: "https://app.allowly.ai/v1/agent-trials/trial_test", decisions_included: 1000, status: "unclaimed",
+    }), { status: 201 }));
+    const { trialCommand } = await import("./trial.js");
+    await trialCommand("create", {});
+  }
+  fetch.mockResolvedValue(new Response("setup-secret-example", { status: 201 }));
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "trial", command, "--json"];
+
+  await import("./index.js");
+  await vi.waitFor(() => expect(error).toHaveBeenCalledWith("Allowly API error: Allowly API returned invalid JSON"));
+
+  expect(process.exitCode).toBe(1);
+  expect(log).not.toHaveBeenCalled();
+  expect(error.mock.calls.flat().join(" ")).not.toContain("setup-secret-example");
+  const saved = JSON.parse(await readFile(join(configDir, "trial.json"), "utf8"));
+  expect(saved.recoverySecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  if (command === "recover") {
+    expect(JSON.parse(await readFile(join(configDir, "config.json"), "utf8")).accessToken).toBe("existing-setup-secret");
+  }
+});
+
 test.each([
   ["login", ["login", "--help"]],
   ["keys create", ["keys", "create", "--help"]],
@@ -83,6 +118,31 @@ test("login saves the dashboard origin without replacing the app API transport",
     expect(raw).not.toContain(browserOnlyValue);
   }
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("login never prints a malformed credential response or replaces its saved config", async () => {
+  const configFile = await configureCli();
+  const before = await readFile(configFile, "utf8");
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({
+      device_code: "test-device-secret", user_code: "TEST-CODE",
+      verification_uri: "https://app.allowly.ai/cli/authorize",
+      verification_uri_complete: "https://app.allowly.ai/cli/authorize?user_code=TEST-CODE",
+      expires_in: 60, interval: 1,
+    })))
+    .mockResolvedValueOnce(new Response("new-human-credential-secret", { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "login", "--no-browser"];
+
+  await import("./index.js");
+  await vi.waitFor(() => expect(error).toHaveBeenCalledWith("Allowly API error: Allowly API returned invalid JSON"), { timeout: 2500 });
+
+  expect(process.exitCode).toBe(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(error.mock.calls.flat().join(" ")).not.toContain("new-human-credential-secret");
+  expect(await readFile(configFile, "utf8")).toBe(before);
 });
 
 test("witness setup forwards the browser-only app URL override without saving it", async () => {

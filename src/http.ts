@@ -63,7 +63,12 @@ export async function apiRequest<T>(
     // Never include Authorization headers or token-looking input in CLI errors.
     throw new AllowlyCliError(message, response.status, code);
   }
-  return (text ? JSON.parse(text) : undefined) as T;
+  try {
+    return (text ? JSON.parse(text) : undefined) as T;
+  } catch {
+    // Parser errors may include a response snippet containing newly issued secrets.
+    throw new AllowlyCliError("Allowly API returned invalid JSON", response.status);
+  }
 }
 
 export async function listAll<T>(config: CliConfig, path: string): Promise<T[]> {

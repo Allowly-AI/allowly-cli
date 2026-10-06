@@ -1,7 +1,8 @@
 {
   "name": "@allowly-ai/cli",
   "version": "0.2.1",
-  "description": "Command-line setup tool for Allowly workspaces",
+  "description": "Agent policy checks and signup-free trial setup for Allowly workspaces",
+  "keywords": ["ai-agent", "agent-policy", "tool-approval", "authorization", "signed-receipts", "cli"],
   "type": "module",
   "bin": {
     "allowly": "./dist/index.js"

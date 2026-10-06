@@ -1,8 +1,36 @@
 # Allowly CLI
 
-Command-line setup tool for Allowly workspaces.
+Set up Allowly policy checks before agent tool calls and keep signed decision receipts.
 
-Use it after a human creates an account and verifies email. Billing is not required for setup. Free, Enterprise, and existing complimentary accounts need no payment method. Other Starter and Plus accounts require one after their first valid runtime check. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
+An agent can start a signup-free Free trial with 1,000 lifetime decisions:
+
+```bash
+allowly trial create --name "My agent" --json
+allowly trial status --json
+```
+
+Follow the [agent onboarding recipe](https://allowly.ai/docs/agents/) to author
+your own policy, enroll a local key, create a new authorization, check a real
+tool, and verify a fresh signed receipt with the existing SDK. The trial service
+must be enabled, and your CLI release must include `allowly trial create`.
+
+The CLI saves recovery proof before its first request. Rerun the same command
+after an interrupted response to recover the same workspace.
+`allowly trial recover --json` explicitly rotates setup/claim secrets only within the first 15 minutes
+and before setup starts. It never restores decisions.
+
+Output contains safe metadata and file paths. `config.json`, `trial.json`, and
+`trial-claim-url.txt` under `ALLOWLY_CONFIG_DIR` (default `~/.allowly`) use
+owner-only permissions. The config saves trusted `workspaceId` and `apiUrl` for
+setup and receipt verification. Hand the secret claim link to the intended person
+through a private channel. A verified person reviews and claims the same account;
+claim preserves usage and replaces old access. At 429 `quota_exceeded`, stop the
+tool and show the protected claim-file path. Unclaimed trials expire after seven days.
+
+Use a separate private `ALLOWLY_CONFIG_DIR` when another workspace is already
+configured. Keep secret files and agent keys out of source control, logs, and chat.
+
+For an existing human-owned workspace, use it after a human creates an account and verifies email. Billing is not required for setup. Free, Enterprise, and existing complimentary accounts need no payment method. Other Starter and Plus accounts require one after their first valid runtime check. `allowly login` opens the dashboard, asks the signed-in owner to approve CLI access, then stores a local CLI credential in `~/.allowly/config.json` with owner-only permissions.
 
 After approval, the saved CLI credential can ask the app's AI drafting service for a local setup file:
 

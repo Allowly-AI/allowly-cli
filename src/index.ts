@@ -11,6 +11,7 @@ import { DEFAULT_API_URL, DEFAULT_APP_URL, configPath, readConfig, removeConfigI
 import { AllowlyCliError, apiRequest, listAll } from "./http.js";
 import { createNativeEnrollment, nativeAgentToken, nativeEnrollmentProof, type NativeAgentCredential, type PendingNativeEnrollment } from "./nativeIdentity.js";
 import { setupWitness } from "./witnessSetup.js";
+import { trialCommand } from "./trial.js";
 import {
   SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -58,15 +59,19 @@ interface DeviceTokenResponse {
 function usage(): string {
   return `Allowly CLI
 
-Allowly is API-first after account and email verification.
+Start a signup-free agent trial with 1,000 lifetime decisions, or log in
+to an existing human-owned workspace.
 Billing is not required for setup. Free, Enterprise, and existing complimentary
 accounts need no payment method. Other Starter and Plus accounts require one
 after their first valid runtime check.
-Run allowly login once, approve the CLI in your browser, then let Codex,
-Claude Code, or a script configure actions, policies, and runtime API keys
-without dashboard or billing access.
+For an existing human-owned workspace, run allowly login and approve the CLI
+in your browser. Then Codex, Claude Code, or a script can configure actions,
+policies, and runtime API keys without dashboard or billing access.
 
 Commands:
+  allowly trial create [--name <name>] [--app-url <url>] [--json]
+  allowly trial status [--json]
+  allowly trial recover [--json]
   allowly login [--app-url <url>] [--api-url <url>] [--no-browser]
   allowly logout
   allowly --version
@@ -93,8 +98,9 @@ Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
 
 Typical agent flow:
-  allowly login
-  allowly init
+  allowly trial create --json
+  allowly init --manual
+  # Write your own allowly.setup.json with agent_id=my-agent.
   allowly actions apply allowly.setup.json
   allowly policies apply allowly.setup.json
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
@@ -139,8 +145,12 @@ async function requestJson<T>(apiUrl: string, path: string, body: unknown): Prom
     const code = errorBody.error?.code ?? "error";
     throw new AllowlyCliError(message, response.status, code);
   }
-  const data = text ? JSON.parse(text) as T : ({} as T);
-  return { status: response.status, data };
+  try {
+    const data = text ? JSON.parse(text) as T : ({} as T);
+    return { status: response.status, data };
+  } catch {
+    throw new AllowlyCliError("Allowly API returned invalid JSON", response.status);
+  }
 }
 
 function openBrowser(url: string): boolean {
@@ -849,6 +859,23 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   if (command === "login") return commandLogin(argv.slice(1));
+  if (command === "trial") {
+    const args = argv.slice(2);
+    const allowed = subcommand === "create" ? ["--name", "--app-url", "--json"] : ["--json"];
+    const seen = new Set<string>();
+    for (let i = 0; i < args.length; i++) {
+      const flag = args[i];
+      if (!allowed.includes(flag) || seen.has(flag)) throw new Error(`Unknown or repeated trial option: ${flag}`);
+      seen.add(flag);
+      if (flag !== "--json") {
+        if (!args[i + 1] || args[i + 1].startsWith("--")) throw new Error(`${flag} requires a value`);
+        i++;
+      }
+    }
+    const result = await trialCommand(subcommand, { name: option(args, "--name"), appUrl: option(args, "--app-url") });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
   if (command === "logout") return commandLogout();
   if (command === "status") return commandStatus();
   if (command === "init") return commandInit(argv.slice(1));
@@ -866,7 +893,7 @@ async function main(argv: string[]): Promise<void> {
 main(process.argv.slice(2)).catch((err) => {
   if (err instanceof AllowlyCliError) {
     const loginHint = err.status === 401
-      && !["check", "login"].includes(process.argv[2] ?? "")
+      && !["check", "login", "trial"].includes(process.argv[2] ?? "")
       && !err.message.includes("allowly login")
       ? " Run `allowly login`."
       : "";
