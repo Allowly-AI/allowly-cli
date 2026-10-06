@@ -145,8 +145,12 @@ async function requestJson<T>(apiUrl: string, path: string, body: unknown): Prom
     const code = errorBody.error?.code ?? "error";
     throw new AllowlyCliError(message, response.status, code);
   }
-  const data = text ? JSON.parse(text) as T : ({} as T);
-  return { status: response.status, data };
+  try {
+    const data = text ? JSON.parse(text) as T : ({} as T);
+    return { status: response.status, data };
+  } catch {
+    throw new AllowlyCliError("Allowly API returned invalid JSON", response.status);
+  }
 }
 
 function openBrowser(url: string): boolean {
