@@ -32,5 +32,8 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@allowly/sdk": "file:../allowly-sdk-ts"
+  }
 }
