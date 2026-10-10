@@ -221,8 +221,9 @@ provide execution or receipt-acknowledgment commands. Use an Allowly SDK for
 customer-side execution.
 
 The command prints the runtime response unchanged. Signed receipts carry a
-`schema_version`; `alg` and `key_id` are signed top-level fields, and `signature` is the
-unpadded base64url string. This local OPA rebuild uses receipt wire 5 and the
+flattened JWS object with `protected`, `payload`, and `signature` strings. The
+protected header binds the algorithm and key ID; decoded evidence carries
+`schema_version`. This local OPA rebuild uses receipt wire 5 and the
 unpublished verifier 5.0.0 source. Use the matching local SDK verifier for
 signature verification. Policy replay is a separate native OPA check with
 retained policy, input, and engine artifacts; a signature alone is not replay.
