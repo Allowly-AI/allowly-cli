@@ -81,7 +81,7 @@ allowly init --use-case no-code-automation
 allowly init --manual
 ```
 
-Use-case seeds are optional. They contain complete `allowly.policy.v1` definitions with ordered `allowly.basic.v1` rules. Catalog entries contain only names and descriptions. Old inline constraints and `requires_*` decision maps are rejected.
+Use-case seeds are optional. They contain complete `allowly.policy.v1` definitions with action-level `decision`/`target` and ordered `allowly.basic.v1` rules. Conditions within a rule use OR; rules may strengthen, but never weaken, the action decision. Catalog entries contain only names and descriptions. Old fallback fields, inline constraints, and `requires_*` decision maps are rejected.
 
 Apply a setup file, or a standalone flat policy JSON file:
 

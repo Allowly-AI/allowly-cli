@@ -30,7 +30,7 @@ test("apply only skips the same retained definition, not a different policy with
   const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [policyResponse()], has_more: false, next_cursor: null })));
   vi.stubGlobal("fetch", fetch); vi.spyOn(console, "log").mockImplementation(() => {});
   await applyPolicies(config, [policy]); expect(fetch).toHaveBeenCalledTimes(1);
-  policy.actions[0].policy.default_decision = "deny";
+  policy.actions[0].policy.decision = "deny";
   fetch.mockResolvedValue(new Response(JSON.stringify({ items: [policyResponse()], has_more: false, next_cursor: null })));
   await expect(applyPolicies(config, [policy])).rejects.toThrow("exact previous_policy_ref");
 });

@@ -17,8 +17,8 @@ export interface PolicyDraft {
 type SeedDecision = "allow" | "confirm" | "deny";
 function entry(name: string, decision: SeedDecision, description: string, fields: PolicyActionEntry["policy"]["fields"] = {}) {
   return { description, definition: {
-    policy: { profile: "allowly.basic.v1" as const, action: name, default_decision: decision,
-      default_target: decision === "confirm" ? "agent_owner" : null, fields, rules: [] },
+    policy: { profile: "allowly.basic.v1" as const, action: name, decision,
+      target: decision === "confirm" ? "agent_owner" : null, fields, rules: [] },
     guards: {}, executable_operations: [],
   } satisfies PolicyActionEntry };
 }

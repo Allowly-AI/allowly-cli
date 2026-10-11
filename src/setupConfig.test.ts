@@ -18,9 +18,9 @@ test("all starter policies contain fresh complete definitions and valid catalog 
     for (const action of seed.policies[0].actions) {
       expect(action.policy.profile).toBe("allowly.basic.v1");
       expect(action).toHaveProperty("guards"); expect(action).toHaveProperty("executable_operations");
-      expect(Object.values(action.policy.fields).every(type => ["string", "integer", "boolean", "null"].includes(type))).toBe(true);
+      expect(Object.values(action.policy.fields).every(type => ["string", "integer", "boolean", "null", "list"].includes(type))).toBe(true);
     }
-    expect(JSON.stringify(seed)).not.toMatch(/requires_|constraints|security_approver/);
+    expect(JSON.stringify(seed)).not.toMatch(/requires_|constraints|security_approver|default_decision|default_target/);
   }
 });
 test("a standalone flat policy file is accepted without a definition wrapper", async () => {
@@ -38,6 +38,21 @@ test.each(["requires_confirm", "requires_escalation", "constraints_schema"])("ca
 test("requires full BasicPolicy instead of inline name/constraints", () => {
   const value = { ...getSetupTemplate("email-agent").policies[0], actions: [{ name: "email.read", constraints: {} }] };
   expect(() => parsePolicyConfig(value)).toThrow();
+});
+test("rejects old fallback authority instead of translating it into an action decision", () => {
+  const value: any = getSetupTemplate("email-agent").policies[0], policy = value.actions[0].policy;
+  policy.default_decision = policy.decision; delete policy.decision;
+  policy.default_target = policy.target; delete policy.target;
+  expect(() => parsePolicyConfig(value)).toThrow();
+});
+test("setup files retain list conditions and action authority without a separate CLI evaluator", async () => {
+  const seed = getSetupTemplate("email-agent"), policy = seed.policies[0].actions[0].policy;
+  policy.fields.tags = "list";
+  policy.rules = [{ id: "sensitive-tags", decision: "escalate", target: "member:reviewer", conditions: [
+    { field: "tags", op: "contains_any", value: ["sensitive", 1, true, null] },
+    { field: "tags", op: "empty", value: false },
+  ] }];
+  expect(await loadSetupConfig(await writeJson(seed))).toEqual(seed);
 });
 test("AI drafts retain the complete definition and ordered rules rather than translating flags", () => {
   const policy = getSetupTemplate("email-agent").policies[0];
@@ -57,12 +72,12 @@ test("successor references are exact and use strict positive safe edition number
 });
 test("MCP sensitive seed fails closed without inventing reviewer IDs", () => {
   const policy = getSetupTemplate("mcp-guardrails").policies[0].actions.find(entry => entry.policy.action === "mcp.tool.call.sensitive")!.policy;
-  expect(policy.default_decision).toBe("deny"); expect(policy.default_target).toBeNull();
+  expect(policy.decision).toBe("deny"); expect(policy.target).toBeNull();
 });
-test("browser and workflow seed safety defaults remain explicit", () => {
-  expect(getSetupTemplate("browser-agent").policies[0].actions.map(entry => entry.policy.default_decision)).toEqual(["allow", "confirm", "deny"]);
-  expect(getSetupTemplate("no-code-automation").policies[0].actions.map(entry => entry.policy.default_decision)).toEqual(["allow", "confirm", "confirm", "deny"]);
-  expect(getSetupTemplate("hr-ops").policies[0].actions[1].policy.default_target).toBe("agent_owner");
+test("browser and workflow action decisions remain explicit", () => {
+  expect(getSetupTemplate("browser-agent").policies[0].actions.map(entry => entry.policy.decision)).toEqual(["allow", "confirm", "deny"]);
+  expect(getSetupTemplate("no-code-automation").policies[0].actions.map(entry => entry.policy.decision)).toEqual(["allow", "confirm", "confirm", "deny"]);
+  expect(getSetupTemplate("hr-ops").policies[0].actions[1].policy.target).toBe("agent_owner");
   expect(SETUP_TEMPLATE_ALIASES["hiring-disposition"]).toBe("hr-ops");
 });
 test("writing a seed never overwrites an existing local file", async () => {
