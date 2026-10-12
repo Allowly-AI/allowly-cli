@@ -1,6 +1,6 @@
 {
   "name": "@allowly-ai/cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Agent policy checks and signup-free trial setup for Allowly workspaces",
   "keywords": ["ai-agent", "agent-policy", "tool-approval", "authorization", "signed-receipts", "cli"],
   "type": "module",
@@ -34,6 +34,6 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@allowly/sdk": "file:../allowly-sdk-ts"
+    "@allowly/sdk": "^0.8.0"
   }
 }
