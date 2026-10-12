@@ -2,240 +2,86 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-
-import {
-  SETUP_TEMPLATE_ALIASES,
-  SETUP_TEMPLATE_NAMES,
-  getSetupTemplate,
-  loadSetupConfig,
-  setupConfigFromPolicyDraft,
-  writeSampleSetupConfig,
-} from "./setupConfig.js";
-
+import { SETUP_TEMPLATE_ALIASES, SETUP_TEMPLATE_NAMES, getSetupTemplate, loadSetupConfig,
+  loadPolicyConfigs, parsePolicyConfig, setupConfigFromPolicyDraft, writeSampleSetupConfig } from "./setupConfig.js";
 const dirs: string[] = [];
-
-afterEach(async () => {
-  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
-});
-
+afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
 async function writeJson(value: unknown): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "allowly-setup-"));
-  dirs.push(dir);
-  const path = join(dir, "allowly.setup.json");
-  await writeFile(path, JSON.stringify(value));
-  return path;
+  const dir = await mkdtemp(join(tmpdir(), "allowly-setup-")); dirs.push(dir);
+  const path = join(dir, "allowly.setup.json"); await writeFile(path, JSON.stringify(value)); return path;
 }
-
-test("loadSetupConfig accepts actions and policies", async () => {
-  const path = await writeJson({
-    actions: [
-      { name: "email.read" },
-      { name: "candidate.delete", requires_escalation: true, escalation_to: "compliance" },
-      { name: "record.delete", requires_deny: true },
-    ],
-    policies: [
-      {
-        policy_id: "basic",
-        agent_id: "agent",
-        actions: [{ name: "email.read" }, { name: "candidate.delete" }, { name: "record.delete" }],
-        requires_escalation_for: ["candidate.delete"],
-        requires_deny_for: ["record.delete"],
-        escalation_targets: { "candidate.delete": "compliance" },
-      },
-    ],
-  });
-
-  await expect(loadSetupConfig(path)).resolves.toMatchObject({
-    actions: [
-      { name: "email.read" },
-      { name: "candidate.delete", requires_escalation: true, escalation_to: "compliance" },
-      { name: "record.delete", requires_deny: true },
-    ],
-    policies: [
-      {
-        policy_id: "basic",
-        agent_id: "agent",
-        requires_escalation_for: ["candidate.delete"],
-        requires_deny_for: ["record.delete"],
-        escalation_targets: { "candidate.delete": "compliance" },
-      },
-    ],
-  });
-});
-
-test("loadSetupConfig rejects policies without actions", async () => {
-  const path = await writeJson({
-    actions: [{ name: "email.read" }],
-    policies: [{ policy_id: "basic", agent_id: "agent", actions: [] }],
-  });
-
-  await expect(loadSetupConfig(path)).rejects.toThrow("must include at least one action");
-});
-
-test("AI policy drafts become local setup files without creating resources", () => {
-  const setup = setupConfigFromPolicyDraft({
-    policy_id: "calendar_assistant_policy",
-    agent_id: "calendar_assistant",
-    description: "List calendar events and confirm before deleting them.",
-    actions: [
-      {
-        name: "calendar.event.list",
-        description: "List calendar events",
-        approval_mode: "allow",
-        escalation_to: "",
-        context_fields: [],
-        constraints: { deny_when: [], confirm_when: [], escalate_when: [] },
-        is_new: true,
-      },
-      {
-        name: "calendar.event.delete",
-        description: "Delete a calendar event",
-        approval_mode: "confirm",
-        escalation_to: "owner",
-        context_fields: [{ name: "risk", type: "integer" }],
-        constraints: {
-          deny_when: [{ field: "risk", op: "gte", value: 9 }],
-          confirm_when: [],
-          escalate_when: [{ field: "risk", op: "gte", value: 7 }],
-        },
-        is_new: true,
-      },
-    ],
-  });
-
-  expect(setup).toEqual({
-    actions: [
-      {
-        name: "calendar.event.list",
-        description: "List calendar events",
-        requires_confirm: false,
-        requires_escalation: false,
-        constraints_schema: {},
-      },
-      {
-        name: "calendar.event.delete",
-        description: "Delete a calendar event",
-        requires_confirm: true,
-        requires_escalation: false,
-        constraints_schema: { context_fields: { risk: "integer" } },
-      },
-    ],
-    policies: [{
-      policy_id: "calendar_assistant_policy",
-      agent_id: "calendar_assistant",
-      description: "List calendar events and confirm before deleting them.",
-      actions: [
-        { name: "calendar.event.list", constraints: {} },
-        {
-          name: "calendar.event.delete",
-          constraints: {
-            deny_when: [{ field: "risk", gte: 9 }],
-            escalate_when: [{ field: "risk", gte: 7 }],
-          },
-        },
-      ],
-      requires_confirm_for: ["calendar.event.delete"],
-      requires_escalation_for: [],
-      requires_deny_for: [],
-      escalation_targets: { "calendar.event.delete": "owner" },
-      default_expiry_days: 365,
-    }],
-  });
-});
-
-test("starter policies are valid setup configs", async () => {
-  for (const useCaseName of SETUP_TEMPLATE_NAMES) {
-    const dir = await mkdtemp(join(tmpdir(), "allowly-policy-"));
-    dirs.push(dir);
-    const path = join(dir, "allowly.setup.json");
-    await writeSampleSetupConfig(path, getSetupTemplate(useCaseName));
-
-    const written = JSON.parse(await readFile(path, "utf8"));
-    expect(written.actions.length).toBeGreaterThan(0);
-    expect(written.policies.length).toBeGreaterThan(0);
-    await expect(loadSetupConfig(path)).resolves.toMatchObject(written);
+test("all starter policies contain fresh complete definitions and valid catalog descriptions", async () => {
+  for (const name of SETUP_TEMPLATE_NAMES) {
+    const seed = getSetupTemplate(name), path = await writeJson(seed);
+    expect(await loadSetupConfig(path)).toEqual(seed);
+    expect(seed.policies[0].profile).toBe("allowly.policy.v1");
+    for (const action of seed.policies[0].actions) {
+      expect(action.policy.profile).toBe("allowly.basic.v1");
+      expect(action).toHaveProperty("guards"); expect(action).toHaveProperty("executable_operations");
+      expect(Object.values(action.policy.fields).every(type => ["string", "integer", "boolean", "null", "list"].includes(type))).toBe(true);
+    }
+    expect(JSON.stringify(seed)).not.toMatch(/requires_|constraints|security_approver|default_decision|default_target/);
   }
 });
-
-test("starter policies include client intelligence, hiring, MCP, and no-code", () => {
-  expect(SETUP_TEMPLATE_NAMES).toEqual([
-    "email-agent",
-    "browser-agent",
-    "client-intelligence",
-    "hr-ops",
-    "mcp-guardrails",
-    "no-code-automation",
-  ]);
-
-  const seed = getSetupTemplate("client-intelligence");
-  expect(seed.actions.map((action) => action.name)).toEqual([
-    "web.search",
-    "web.page.read",
-    "contact.profile.read",
-    "crm.account.read",
-    "lead.enrich",
-    "email.draft",
-    "email.send",
-  ]);
-  expect(seed.policies[0].requires_confirm_for).toEqual(["lead.enrich", "email.send"]);
+test("a standalone flat policy file is accepted without a definition wrapper", async () => {
+  const policy = getSetupTemplate("email-agent").policies[0];
+  expect(await loadPolicyConfigs(await writeJson(policy))).toEqual([policy]);
+  expect(await loadPolicyConfigs(await writeJson(getSetupTemplate("email-agent")))).toEqual([policy]);
 });
-
-test("generated browser policy confirms clicks and denies form submits", () => {
-  const seed = getSetupTemplate("browser-agent");
-  const policy = seed.policies[0];
-
-  expect(policy.requires_confirm_for).toEqual(["browser.click"]);
-  expect(policy.requires_deny_for).toEqual(["browser.form.submit"]);
-  expect(policy.default_expiry_days).toBe(365);
+test.each(["requires_confirm_for", "requires_escalation_for", "requires_deny_for", "escalation_targets", "definition"])("rejects old/wrapped policy authority %s", key => {
+  expect(() => parsePolicyConfig({ ...getSetupTemplate("email-agent").policies[0], [key]: [] })).toThrow("unknown fields");
 });
-
-test("hr-ops template gates publishing feedback on process integrity", () => {
-  const seed = getSetupTemplate("hr-ops");
-  const policy = seed.policies[0];
-
-  expect(seed.actions.map((action) => action.name)).toEqual([
-    "hiring.synthesize_feedback",
-    "hiring.publish_feedback",
-  ]);
-  expect(policy.requires_confirm_for).toEqual(["hiring.publish_feedback"]);
-  expect(policy.requires_escalation_for).toEqual([]);
-  for (const action of seed.actions) {
-    expect(action.constraints_schema).toEqual({
-      context_fields: {
-        outcome: "string",
-        reviewer_id: "string",
-        summary_grounded: "boolean",
-        transcript_completeness: "integer",
-        panel_feedback_complete: "boolean",
-        candidate_ai_opt_out: "boolean",
-        checks_failed: "list",
-      },
-    });
-  }
+test.each(["requires_confirm", "requires_escalation", "constraints_schema"])("catalog fields cannot carry decision authority: %s", async key => {
+  const seed = getSetupTemplate("email-agent") as any; seed.actions[0][key] = true;
+  await expect(loadSetupConfig(await writeJson(seed))).rejects.toThrow("names/descriptions only");
 });
-
-test("hiring-disposition aliases the hr-ops template", () => {
+test("requires full BasicPolicy instead of inline name/constraints", () => {
+  const value = { ...getSetupTemplate("email-agent").policies[0], actions: [{ name: "email.read", constraints: {} }] };
+  expect(() => parsePolicyConfig(value)).toThrow();
+});
+test("rejects old fallback authority instead of translating it into an action decision", () => {
+  const value: any = getSetupTemplate("email-agent").policies[0], policy = value.actions[0].policy;
+  policy.default_decision = policy.decision; delete policy.decision;
+  policy.default_target = policy.target; delete policy.target;
+  expect(() => parsePolicyConfig(value)).toThrow();
+});
+test("setup files retain list conditions and action authority without a separate CLI evaluator", async () => {
+  const seed = getSetupTemplate("email-agent"), policy = seed.policies[0].actions[0].policy;
+  policy.fields.tags = "list";
+  policy.rules = [{ id: "sensitive-tags", decision: "escalate", target: "member:reviewer", conditions: [
+    { field: "tags", op: "contains_any", value: ["sensitive", 1, true, null] },
+    { field: "tags", op: "empty", value: false },
+  ] }];
+  expect(await loadSetupConfig(await writeJson(seed))).toEqual(seed);
+});
+test("AI drafts retain the complete definition and ordered rules rather than translating flags", () => {
+  const policy = getSetupTemplate("email-agent").policies[0];
+  const definition = { profile: policy.profile, agent_id: policy.agent_id, actions: policy.actions, default_expiry_days: policy.default_expiry_days };
+  const result = setupConfigFromPolicyDraft({ policy_id: "email_review", description: "Review email", definition, action_definitions: [
+    { name: "email.read", description: "Read email" }, { name: "email.send", description: "Send email" },
+  ] });
+  expect(result.policies[0]).toEqual({ ...definition, policy_id: "email_review", description: "Review email" });
+  expect(() => setupConfigFromPolicyDraft({ ...definition, policy_id: "old", description: "Old", actions: [] } as any)).toThrow();
+  expect(() => setupConfigFromPolicyDraft({ policy_id: "email_review", description: "Review email", definition, action_definitions: [{ name: "other", description: "Wrong" }] })).toThrow("exactly match");
+});
+test("successor references are exact and use strict positive safe edition numbers", () => {
+  const policy = getSetupTemplate("email-agent").policies[0];
+  const reference = { policy_id: policy.policy_id, policy_version: 1, definition_sha256: "a".repeat(64) };
+  expect(parsePolicyConfig({ ...policy, previous_policy_ref: reference }).previous_policy_ref).toEqual(reference);
+  for (const version of [true, 0, -1, "1", 1.5, 2 ** 53]) expect(() => parsePolicyConfig({ ...policy, previous_policy_ref: { ...reference, policy_version: version } })).toThrow();
+});
+test("MCP sensitive seed fails closed without inventing reviewer IDs", () => {
+  const policy = getSetupTemplate("mcp-guardrails").policies[0].actions.find(entry => entry.policy.action === "mcp.tool.call.sensitive")!.policy;
+  expect(policy.decision).toBe("deny"); expect(policy.target).toBeNull();
+});
+test("browser and workflow action decisions remain explicit", () => {
+  expect(getSetupTemplate("browser-agent").policies[0].actions.map(entry => entry.policy.decision)).toEqual(["allow", "confirm", "deny"]);
+  expect(getSetupTemplate("no-code-automation").policies[0].actions.map(entry => entry.policy.decision)).toEqual(["allow", "confirm", "confirm", "deny"]);
+  expect(getSetupTemplate("hr-ops").policies[0].actions[1].policy.target).toBe("agent_owner");
   expect(SETUP_TEMPLATE_ALIASES["hiring-disposition"]).toBe("hr-ops");
 });
-
-test("mcp-guardrails template escalates sensitive tool calls", () => {
-  const seed = getSetupTemplate("mcp-guardrails");
-  const policy = seed.policies[0];
-
-  expect(seed.actions.map((action) => action.name)).toEqual([
-    "mcp.tool.read",
-    "mcp.tool.call",
-    "mcp.tool.call.sensitive",
-  ]);
-  expect(policy.requires_confirm_for).toEqual(["mcp.tool.call"]);
-  expect(policy.requires_escalation_for).toEqual(["mcp.tool.call.sensitive"]);
-  expect(policy.escalation_targets?.["mcp.tool.call.sensitive"]).toBe("security_approver");
-});
-
-test("no-code-automation generated policy denies irreversible workflow steps", () => {
-  const seed = getSetupTemplate("no-code-automation");
-  const policy = seed.policies[0];
-
-  expect(policy.requires_confirm_for).toEqual(["workflow.record.update", "workflow.message.send"]);
-  expect(policy.requires_deny_for).toEqual(["workflow.irreversible.execute"]);
+test("writing a seed never overwrites an existing local file", async () => {
+  const path = await writeJson({ original: true });
+  await expect(writeSampleSetupConfig(path)).rejects.toMatchObject({ code: "EEXIST" });
+  expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ original: true });
 });

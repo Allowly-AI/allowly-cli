@@ -1,12 +1,14 @@
 import { createPublicKey, verify } from "node:crypto";
-import fsPromises, { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import fsPromises, { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { hashSealValue } from "@allowly/sdk";
 
 import { writeConfig } from "./config.js";
 import { createNativeEnrollment, type NativeAgentCredential } from "./nativeIdentity.js";
+import { getSetupTemplate, policyDefinition } from "./setupConfig.js";
 
 const originalArgv = process.argv;
 const originalExitCode = process.exitCode;
@@ -29,6 +31,65 @@ async function configureCli(): Promise<string> {
   await writeConfig({ apiUrl: "https://api.allowly.test", accessToken: "setup-secret" });
   return join(configDir, "config.json");
 }
+
+test("policies apply dispatches the complete flat file through the SDK", async () => {
+  const configFile = await configureCli();
+  const policy = getSetupTemplate("email-agent").policies[0];
+  const file = join(configFile, "..", "policy.json");
+  await writeFile(file, JSON.stringify(policy));
+  const definition = policyDefinition(policy);
+  const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).includes("/v1/setup/actions")) return new Response(JSON.stringify({ items: policy.actions.map((item) => ({ name: item.policy.action })), has_more: false, next_cursor: null }));
+    if (String(url).includes("/v1/policies?")) return new Response(JSON.stringify({ items: [], has_more: false, next_cursor: null }));
+    expect(String(url)).toBe("https://api.allowly.test/v1/policies");
+    expect(JSON.parse(String(init?.body))).toEqual(policy);
+    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer setup-secret");
+    return new Response(JSON.stringify({ policy_ref: { policy_id: policy.policy_id, policy_version: 1, definition_sha256: hashSealValue(definition) }, definition, description: policy.description, created_by: "member:owner", created_at: "2026-10-10T00:00:00Z", deleted_at: null }), { status: 201 });
+  });
+  vi.stubGlobal("fetch", fetch);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "policies", "apply", file];
+  await import("./index.js");
+  await vi.waitFor(() => expect(log).toHaveBeenCalledWith("created policy email-agent-basic (edition 1)"));
+  expect(error).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+test.each([
+  ["apply", ["--requires-confirm"], "Policies apply accepts only"],
+  ["preview", [], "Preview requires"],
+  ["preview", ["--action", "email.send"], "Preview requires"],
+  ["preview", ["--action", "email.send", "--context", "[]"], "--context must be a JSON object"],
+  ["preview", ["--requires-confirm", "true"], "Unknown or repeated policy option"],
+  ["preview", ["--action", "email.send", "--action", "email.read"], "Unknown or repeated policy option"],
+  ["preview", ["--action"], "--action requires a value"],
+  ["publish", [], "Publish requires --idempotency-key"],
+  ["publish", ["--idempotency-key"], "--idempotency-key requires a value"],
+  ["publish", ["--confirm", "true"], "Unknown or repeated policy option"],
+])("policies %s rejects missing/legacy options before files or network", async (command, args, message) => {
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "policies", command, "/nonexistent/policy.json", ...args];
+  await import("./index.js");
+  await vi.waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining(message)));
+  expect(fetch).not.toHaveBeenCalled();
+  expect(process.exitCode).toBe(1);
+});
+
+test("setup guide prints the complete fresh seed without inline decision maps", async () => {
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  const configDir = await mkdtemp(join(tmpdir(), "allowly-cli-guide-")); tempDirs.push(configDir);
+  vi.stubEnv("ALLOWLY_CONFIG_DIR", configDir);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "setup", "guide"];
+  await import("./index.js");
+  await vi.waitFor(() => expect(log).toHaveBeenCalled());
+  const guide = String(log.mock.calls[0][0]);
+  expect(guide).toContain(JSON.stringify(getSetupTemplate("email-agent"), null, 2));
+  expect(guide).not.toMatch(/requires_confirm_for|constraints_schema|requires_escalation_for/);
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 test.each(["create", "recover"])("trial %s never prints a malformed bootstrap body", async (command) => {
   const configDir = await mkdtemp(join(tmpdir(), "allowly-cli-trial-"));

@@ -12,6 +12,7 @@ import { AllowlyCliError, apiRequest, listAll } from "./http.js";
 import { createNativeEnrollment, nativeAgentToken, nativeEnrollmentProof, type NativeAgentCredential, type PendingNativeEnrollment } from "./nativeIdentity.js";
 import { setupWitness } from "./witnessSetup.js";
 import { trialCommand } from "./trial.js";
+import { applyPolicies, previewPolicy, publishPolicy } from "./policyCommands.js";
 import {
   SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -20,6 +21,8 @@ import {
   getSetupTemplate,
   isSetupTemplateName,
   loadSetupConfig,
+  loadPolicyConfig,
+  loadPolicyConfigs,
   setupConfigFromPolicyDraft,
   writeSampleSetupConfig,
   type PolicyDraft,
@@ -82,6 +85,8 @@ Commands:
   allowly init --manual
   allowly actions apply <allowly.setup.json>
   allowly policies apply <allowly.setup.json>
+  allowly policies preview <policy.json> --action <action> --context <JSON-object>
+  allowly policies publish <policy.json> --idempotency-key <stable-key>
   allowly keys create [--write-env .env.local] [--var ALLOWLY_API_KEY]
   allowly agent enroll <agent-id> [--out <credential.json>] [--resume]
   allowly agent remove <agent-id> [--key-id <key-id>] [--yes]
@@ -423,36 +428,9 @@ Setup order:
 1. Define actions: individual permissions like web.search or lead.enrich.
 2. Define policies: reusable groups of actions plus decision rules per agent/use case.
 3. Create a runtime API key and store it in your app env or secret manager.
-4. Your app creates authorizations from policy IDs and calls /v1/check before acting.
+4. Your app creates authorizations from exact policy IDs and positive edition numbers and calls /v1/check before acting.
 
-Setup file format:
-{
-  "actions": [
-    {
-      "name": "web.search",
-      "description": "Search the public web.",
-      "requires_confirm": false,
-      "constraints_schema": {}
-    }
-  ],
-  "policies": [
-    {
-      "policy_id": "marketing_user_enrichment",
-      "agent_id": "marketing_user_enrichment",
-      "description": "Enriches users with public marketing context.",
-      "actions": [
-        { "name": "web.search" }
-      ],
-      "requires_confirm_for": [],
-      "requires_escalation_for": [],
-      "requires_deny_for": [],
-      "escalation_targets": {},
-      "default_expiry_days": 90
-    }
-  ]
-}
-
-Apply:
+Setup file format:\n${JSON.stringify(getSetupTemplate("email-agent"), null, 2)}\n\nApply:
   allowly actions apply allowly.setup.json
   allowly policies apply allowly.setup.json
   allowly keys create --write-env .env.local --var ALLOWLY_API_KEY
@@ -659,52 +637,57 @@ async function commandActionsApply(file: string | undefined): Promise<void> {
     await apiRequest(config, "POST", "/v1/setup/actions", {
       name: action.name,
       description: action.description,
-      requires_confirm: action.requires_confirm ?? false,
-      requires_escalation: action.requires_escalation ?? false,
-      escalation_to: action.escalation_to,
-      constraints_schema: action.constraints_schema ?? {},
     });
     console.log(`created action ${action.name}`);
   }
 }
 
-async function commandPoliciesApply(file: string | undefined): Promise<void> {
+async function commandPoliciesApply(file: string | undefined, args: string[]): Promise<void> {
   if (!file) throw new Error("Missing setup config path");
+  if (args.length) throw new Error("Policies apply accepts only a complete flat policy or setup JSON file");
   const config = await readConfig();
-  const setup = await loadSetupConfig(resolve(file));
+  const policies = await loadPolicyConfigs(resolve(file));
   const actions = await listAll<{ name: string }>(config, "/v1/setup/actions");
   const remoteActionNames = new Set(actions.map((action) => action.name));
-  for (const policy of setup.policies) {
-    const missing = policy.actions.map((action) => action.name).filter((name) => !remoteActionNames.has(name));
+  for (const policy of policies) {
+    const missing = policy.actions.map((action) => action.policy.action).filter((name) => !remoteActionNames.has(name));
     if (missing.length) {
       throw new Error(`policy ${policy.policy_id} references missing actions: ${missing.join(", ")}. Run allowly actions apply first.`);
     }
   }
 
-  const existing = await listAll<{ policy_id?: string }>(config, "/v1/setup/policies");
-  const existingIds = new Set(
-    existing
-      .map((policy) => policy.policy_id)
-      .filter((policyId): policyId is string => Boolean(policyId)),
-  );
-  for (const policy of setup.policies) {
-    if (existingIds.has(policy.policy_id)) {
-      console.log(`skip policy ${policy.policy_id}`);
-      continue;
-    }
-    await apiRequest(config, "POST", "/v1/setup/policies", {
-      policy_id: policy.policy_id,
-      agent_id: policy.agent_id,
-      description: policy.description,
-      actions: policy.actions.map((action) => ({ name: action.name, constraints: action.constraints ?? {} })),
-      requires_confirm_for: policy.requires_confirm_for ?? [],
-      requires_escalation_for: policy.requires_escalation_for ?? [],
-      requires_deny_for: policy.requires_deny_for ?? [],
-      escalation_targets: policy.escalation_targets ?? {},
-      default_expiry_days: policy.default_expiry_days,
-    });
-    console.log(`created policy ${policy.policy_id}`);
+  await applyPolicies(config, policies);
+}
+
+function policyCommandOptions(args: string[], allowed: string[]): void {
+  const seen = new Set<string>();
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index];
+    if (!allowed.includes(flag) || seen.has(flag)) throw new Error(`Unknown or repeated policy option: ${flag}`);
+    if (!args[index + 1] || args[index + 1].startsWith("--")) throw new Error(`${flag} requires a value`);
+    seen.add(flag);
   }
+}
+
+async function commandPolicyPreview(file: string | undefined, args: string[]): Promise<void> {
+  if (!file) throw new Error("Missing complete flat policy JSON path");
+  policyCommandOptions(args, ["--action", "--context"]);
+  const action = option(args, "--action");
+  const contextJson = option(args, "--context");
+  if (!action || contextJson === undefined) throw new Error("Preview requires --action and --context JSON-object");
+  const context: unknown = JSON.parse(contextJson);
+  if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("--context must be a JSON object");
+  const preview = await previewPolicy(await readConfig(), await loadPolicyConfig(resolve(file)), action, context as Record<string, unknown>);
+  console.log(JSON.stringify(preview, null, 2));
+  console.log("Provisional OPA rules only; grants, live guards and final execution permission are not checked.");
+}
+
+async function commandPolicyPublish(file: string | undefined, args: string[]): Promise<void> {
+  if (!file) throw new Error("Missing complete flat policy JSON path");
+  policyCommandOptions(args, ["--idempotency-key"]);
+  const key = option(args, "--idempotency-key");
+  if (!key) throw new Error("Publish requires --idempotency-key");
+  console.log(JSON.stringify(await publishPolicy(await readConfig(), await loadPolicyConfig(resolve(file)), key), null, 2));
 }
 
 async function upsertEnvVar(path: string, name: string, value: string): Promise<void> {
@@ -882,7 +865,9 @@ async function main(argv: string[]): Promise<void> {
   if (command === "setup" && subcommand === "guide") return commandSetupGuide();
   if (command === "setup" && subcommand === "witness") return commandSetupWitness(argv.slice(2));
   if (command === "actions" && subcommand === "apply") return commandActionsApply(action);
-  if (command === "policies" && subcommand === "apply") return commandPoliciesApply(action);
+  if (command === "policies" && subcommand === "apply") return commandPoliciesApply(action, argv.slice(3));
+  if (command === "policies" && subcommand === "preview") return commandPolicyPreview(action, argv.slice(3));
+  if (command === "policies" && subcommand === "publish") return commandPolicyPublish(action, argv.slice(3));
   if (command === "keys" && subcommand === "create") return commandKeysCreate(argv.slice(2));
   if (command === "agent" && subcommand === "enroll") return commandAgentEnroll(action, argv.slice(3));
   if (command === "agent" && subcommand === "remove") return commandAgentRemove(action, argv.slice(3));

@@ -81,7 +81,20 @@ allowly init --use-case no-code-automation
 allowly init --manual
 ```
 
-Use-case seeds are optional. If you already know your actions, create them first, then group them into policies per agent.
+Use-case seeds are optional. They contain complete `allowly.policy.v1` definitions with action-level `decision`/`target` and ordered `allowly.basic.v1` rules. Conditions within a rule use OR; rules may strengthen, but never weaken, the action decision. Catalog entries contain only names and descriptions. Old fallback fields, inline constraints, and `requires_*` decision maps are rejected.
+
+Apply a setup file, or a standalone flat policy JSON file:
+
+```bash
+allowly actions apply allowly.setup.json
+allowly policies apply allowly.setup.json
+allowly policies preview policy.json --action email.send --context '{"recipient_scope":"external"}'
+allowly policies publish policy.json --idempotency-key publish-email-edition-2
+```
+
+`policy.json` contains the full definition fields (`profile`, `agent_id`, `actions`, `default_expiry_days`) alongside its logical `policy_id` and optional `description`. Do not wrap the API body in `definition`. To create a successor, include the exact `previous_policy_ref` returned for the prior edition: its `policy_id`, positive integer `policy_version`, and `definition_sha256`.
+
+Apply skips an existing policy only when its retained definition hash is identical. A changed definition requires an explicit previous reference. Publish checks owner, member, and executable-operation permissions on the server; it may replace that owner's grants. Preview reports provisional OPA output only. It does not authorize execution or check live grant limits. The MCP sensitive-tool seed stays denied until you configure a real `member:<ID>` reviewer.
 
 CLI credentials can configure actions, policies, setup status, and runtime-key creation. They cannot call `/v1/check`, access billing, manage users, or change passwords.
 
@@ -208,5 +221,9 @@ provide execution or receipt-acknowledgment commands. Use an Allowly SDK for
 customer-side execution.
 
 The command prints the runtime response unchanged. Signed receipts carry a
-`schema_version`; `alg` and `key_id` are signed top-level fields, and `signature` is the
-unpadded base64url string. Use an Allowly SDK verifier for offline verification.
+flattened JWS object with `protected`, `payload`, and `signature` strings. The
+protected header binds the algorithm and key ID; decoded evidence carries
+`schema_version`. This local OPA rebuild uses receipt wire 5 and the
+unpublished verifier 5.0.0 source. Use the matching local SDK verifier for
+signature verification. Policy replay is a separate native OPA check with
+retained policy, input, and engine artifacts; a signature alone is not replay.
