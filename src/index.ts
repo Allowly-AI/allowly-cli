@@ -13,6 +13,7 @@ import { createNativeEnrollment, nativeAgentToken, nativeEnrollmentProof, type N
 import { setupWitness } from "./witnessSetup.js";
 import { trialCommand } from "./trial.js";
 import { applyPolicies, previewPolicy, publishPolicy } from "./policyCommands.js";
+import { parseIntegerJson } from "./integerJson.js";
 import {
   SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -182,7 +183,7 @@ async function commandLogin(args: string[]): Promise<void> {
   const apiUrl = apiUrlOverride ?? DEFAULT_API_URL;
   const appUrl = option(args, "--app-url") ?? DEFAULT_APP_URL;
   if (setupToken) {
-    await writeConfig({ apiUrl, accessToken: setupToken });
+    await writeConfig({ apiUrl, appUrl, accessToken: setupToken });
     console.log(`Allowly CLI configured for ${apiUrl.replace(/\/$/, "")}`);
     console.log("Manual setup-token login is supported for advanced flows; normal setup should use `allowly login`.");
     return;
@@ -675,7 +676,7 @@ async function commandPolicyPreview(file: string | undefined, args: string[]): P
   const action = option(args, "--action");
   const contextJson = option(args, "--context");
   if (!action || contextJson === undefined) throw new Error("Preview requires --action and --context JSON-object");
-  const context: unknown = JSON.parse(contextJson);
+  const context: unknown = parseIntegerJson(contextJson);
   if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("--context must be a JSON object");
   const preview = await previewPolicy(await readConfig(), await loadPolicyConfig(resolve(file)), action, context as Record<string, unknown>);
   console.log(JSON.stringify(preview, null, 2));
@@ -781,9 +782,9 @@ async function commandCheck(args: string[]): Promise<void> {
   if (contextRaw) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(contextRaw);
+      parsed = parseIntegerJson(contextRaw);
     } catch {
-      throw new Error("--context must be valid JSON");
+      throw new Error("--context must be valid JSON with safe whole integers");
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("--context must be a JSON object");

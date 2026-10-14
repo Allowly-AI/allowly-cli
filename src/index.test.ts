@@ -181,6 +181,20 @@ test("login saves the dashboard origin without replacing the app API transport",
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+test("setup-token login preserves the selected app and runtime URLs without a network call", async () => {
+  const configFile = await configureCli();
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  process.argv = [process.execPath, "allowly", "login", "--setup-token", "test-setup-secret",
+    "--app-url", "http://127.0.0.1:8480/", "--api-url", "http://127.0.0.1:8085/"];
+  await import("./index.js");
+  await vi.waitFor(() => expect(log).toHaveBeenCalledWith("Allowly CLI configured for http://127.0.0.1:8085"));
+  expect(JSON.parse(await readFile(configFile, "utf8"))).toEqual({
+    appUrl: "http://127.0.0.1:8480", apiUrl: "http://127.0.0.1:8085", accessToken: "test-setup-secret",
+  });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 test("login never prints a malformed credential response or replaces its saved config", async () => {
   const configFile = await configureCli();
   const before = await readFile(configFile, "utf8");
@@ -377,6 +391,22 @@ test("check sends the agent token in a header and the client timestamp in the bo
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
 
   expect(String(fetch.mock.calls[0]?.[0])).toBe("https://api.allowly.test/v1/check");
+});
+
+test.each(["check", "preview"])("%s rejects rounded fractional context before sending", async command => {
+  await configureCli();
+  vi.stubEnv("ALLOWLY_API_KEY", "runtime-secret");
+  const fetch = vi.fn(async () => new Response("{}")); vi.stubGlobal("fetch", fetch);
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const args = command === "check" ? ["check", "--authorization-id", "auth_test"]
+    : ["policies", "preview", "/nonexistent/policy.json"];
+  process.argv = [process.execPath, "allowly", ...args, "--action", "mail.send",
+    "--context", '{"nested":[9007199254740991.1]}'];
+  await import("./index.js");
+  await vi.waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining("safe whole integers")));
+  expect(fetch).not.toHaveBeenCalled();
+  expect(process.exitCode).toBe(1);
 });
 
 test("check rejects a client timestamp without a timezone before sending", async () => {

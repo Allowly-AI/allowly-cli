@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { SETUP_TEMPLATE_ALIASES, SETUP_TEMPLATE_NAMES, getSetupTemplate, loadSetupConfig,
-  loadPolicyConfigs, parsePolicyConfig, setupConfigFromPolicyDraft, writeSampleSetupConfig } from "./setupConfig.js";
+  loadPolicyConfig, loadPolicyConfigs, parsePolicyConfig, setupConfigFromPolicyDraft, writeSampleSetupConfig } from "./setupConfig.js";
 const dirs: string[] = [];
 afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
 async function writeJson(value: unknown): Promise<string> {
@@ -27,6 +27,19 @@ test("a standalone flat policy file is accepted without a definition wrapper", a
   const policy = getSetupTemplate("email-agent").policies[0];
   expect(await loadPolicyConfigs(await writeJson(policy))).toEqual([policy]);
   expect(await loadPolicyConfigs(await writeJson(getSetupTemplate("email-agent")))).toEqual([policy]);
+});
+test.each(["365.00000000000001", "365.0", "3.65e2"])("setup and policy files reject non-integer number token %s", async token => {
+  const seed = getSetupTemplate("email-agent");
+  const standalone = await writeJson(seed.policies[0]);
+  const setup = await writeJson(seed);
+  for (const path of [standalone, setup]) {
+    const raw = await readFile(path, "utf8");
+    await writeFile(path, raw.replace('"default_expiry_days":365', '"default_expiry_days":' + token));
+  }
+  await expect(loadSetupConfig(setup)).rejects.toThrow("safe whole integers");
+  await expect(loadPolicyConfig(standalone)).rejects.toThrow("safe whole integers");
+  await expect(loadPolicyConfigs(standalone)).rejects.toThrow("safe whole integers");
+  await expect(loadPolicyConfigs(setup)).rejects.toThrow("safe whole integers");
 });
 test.each(["requires_confirm_for", "requires_escalation_for", "requires_deny_for", "escalation_targets", "definition"])("rejects old/wrapped policy authority %s", key => {
   expect(() => parsePolicyConfig({ ...getSetupTemplate("email-agent").policies[0], [key]: [] })).toThrow("unknown fields");

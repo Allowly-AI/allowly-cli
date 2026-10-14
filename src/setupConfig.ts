@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { parseIntegerJson } from "./integerJson.js";
 import { parsePolicyReference, validatePolicyDefinition, type PolicyActionEntry, type PolicyDefinition, type PolicyReference } from "@allowly/sdk";
 
 export interface ActionConfig { name: string; description?: string }
@@ -133,13 +134,13 @@ function parseSetupConfig(value: unknown): AllowlySetupConfig {
   return { actions: parseActions(raw.actions), policies: raw.policies.map(parsePolicyConfig) };
 }
 export async function loadSetupConfig(path: string): Promise<AllowlySetupConfig> {
-  return parseSetupConfig(JSON.parse(await readFile(path, "utf8")));
+  return parseSetupConfig(parseIntegerJson(await readFile(path, "utf8")));
 }
 export async function loadPolicyConfig(path: string): Promise<PolicyConfig> {
-  return parsePolicyConfig(JSON.parse(await readFile(path, "utf8")));
+  return parsePolicyConfig(parseIntegerJson(await readFile(path, "utf8")));
 }
 export async function loadPolicyConfigs(path: string): Promise<PolicyConfig[]> {
-  const raw = object(JSON.parse(await readFile(path, "utf8")), "policy file");
+  const raw = object(parseIntegerJson(await readFile(path, "utf8")), "policy file");
   if (raw.profile === "allowly.policy.v1") return [parsePolicyConfig(raw)];
   return parseSetupConfig(raw).policies;
 }
