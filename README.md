@@ -67,6 +67,8 @@ Login saves the browser dashboard origin returned by Allowly separately from
 the control-plane API address. For example, a local login can use
 `http://127.0.0.1:8480` for API requests while browser pages open at
 `https://localhost:8843`.
+Advanced `login --setup-token` also keeps the chosen `--app-url` and `--api-url`
+in the local config; it does not run the browser approval flow.
 
 ## Optional use-case seeds
 
@@ -223,7 +225,7 @@ customer-side execution.
 The command prints the runtime response unchanged. Signed receipts carry a
 flattened JWS object with `protected`, `payload`, and `signature` strings. The
 protected header binds the algorithm and key ID; decoded evidence carries
-`schema_version`. This local OPA rebuild uses receipt wire 5 and the
-unpublished verifier 5.0.0 source. Use the matching local SDK verifier for
-signature verification. Policy replay is a separate native OPA check with
-retained policy, input, and engine artifacts; a signature alone is not replay.
+`schema_version`. Runtime receipts use wire 5 and the published verifier
+5.0.0. Use the matching SDK verifier for signature verification against your
+configured workspace. Policy replay is a separate native OPA check with retained
+policy, input, and engine artifacts; a signature alone is not replay.

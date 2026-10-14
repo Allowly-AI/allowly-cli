@@ -1,6 +1,6 @@
 {
   "name": "@allowly-ai/cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Agent policy checks and signup-free trial setup for Allowly workspaces",
   "keywords": ["ai-agent", "agent-policy", "tool-approval", "authorization", "signed-receipts", "cli"],
   "type": "module",
