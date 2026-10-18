@@ -46,6 +46,13 @@ Install the public npm package:
 npm install -g @allowly-ai/cli
 ```
 
+For this policy-evidence source revision, run `npm ci` in the checkout. It
+installs and builds the SDK from reviewed commit
+[`b930f0481aa8ca656a58efc682a366d1cea3a9fb`](https://github.com/Allowly-AI/allowly-sdk-ts/commit/b930f0481aa8ca656a58efc682a366d1cea3a9fb)
+through its `prepare` hook. CLI `0.3.1`, SDK `0.8.0` and verifier `5.0.0`
+remain unchanged under the approved contract exception. Source installation
+requires GitHub and npm registry access.
+
 Then:
 
 ```bash
@@ -95,6 +102,13 @@ allowly policies publish policy.json --idempotency-key publish-email-edition-2
 ```
 
 `policy.json` contains the full definition fields (`profile`, `agent_id`, `actions`, `default_expiry_days`) alongside its logical `policy_id` and optional `description`. Do not wrap the API body in `definition`. To create a successor, include the exact `previous_policy_ref` returned for the prior edition: its `policy_id`, positive integer `policy_version`, and `definition_sha256`.
+
+Optional action-level `evidence` declares extraction requirements for every
+`policy.fields` entry. The shared SDK validates and retains AI instructions,
+`email_domain` extraction and direct-boolean `all_of` requirements through
+drafts, files, apply, preview and publish. Evidence changes alter the complete
+definition hash. Observation source mappings are configured separately;
+preview evaluates the context you supply.
 
 Apply skips an existing policy only when its retained definition hash is identical. A changed definition requires an explicit previous reference. Publish checks owner, member, and executable-operation permissions on the server; it may replace that owner's grants. Preview reports provisional OPA output only. It does not authorize execution or check live grant limits. The MCP sensitive-tool seed stays denied until you configure a real `member:<ID>` reviewer.
 
