@@ -48,7 +48,7 @@ npm install -g @allowly-ai/cli
 
 For this Observe SDK/API source revision, run `npm ci` in the checkout. It
 installs and builds the SDK from reviewed commit
-[`a3e32440bd96ae549590c1184c55b1a3200e1afe`](https://github.com/Allowly-AI/allowly-sdk-ts/commit/a3e32440bd96ae549590c1184c55b1a3200e1afe)
+[`645d3ba16a9ce2f4d1fb1f27a54ad00468d54346`](https://github.com/Allowly-AI/allowly-sdk-ts/commit/645d3ba16a9ce2f4d1fb1f27a54ad00468d54346)
 through its `prepare` hook. CLI `0.3.1`, SDK `0.8.0` and verifier `5.0.0`
 remain unchanged under the approved contract exception. Source installation
 requires GitHub and npm registry access.
