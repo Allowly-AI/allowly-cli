@@ -14,6 +14,7 @@ import { setupWitness } from "./witnessSetup.js";
 import { trialCommand } from "./trial.js";
 import { applyPolicies, previewPolicy, publishPolicy } from "./policyCommands.js";
 import { parseIntegerJson } from "./integerJson.js";
+import { Allowly, type ObserveReportedExecution, type PolicyReference } from "@allowly/sdk";
 import {
   SETUP_TEMPLATE_ALIASES,
   SETUP_TEMPLATE_DESCRIPTIONS,
@@ -99,6 +100,8 @@ Commands:
   allowly setup witness --helper <local-rust-helper> --witness-ca-cert <local-ca.pem>
   allowly setup witness --helper <local-rust-helper> --app-url <dashboard-url>
   allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local] [--agent-credential <credential.json>]
+  allowly observe submit <event.json> [--api-key <runtime-key>] [--api-url <url>]
+  allowly observe get <event-id> [--api-key <runtime-key>] [--api-url <url>]
 
 Optional use-case seeds:
 ${SETUP_TEMPLATE_NAMES.map((name) => `  ${name.padEnd(20)} ${SETUP_TEMPLATE_DESCRIPTIONS[name]}`).join("\n")}
@@ -733,7 +736,10 @@ async function readRuntimeKeyFromEnvFile(path: string, envVar: string): Promise<
 }
 
 async function runtimeConfigFromArgs(args: string[]): Promise<RuntimeConfig> {
-  const setupConfig = await readConfig();
+  const setupConfig = await readConfig().catch((error: unknown) => {
+    if ((error as { cause?: { code?: string } }).cause?.code !== "ENOENT") throw error;
+    return { apiUrl: DEFAULT_API_URL };
+  });
   const apiUrl = option(args, "--api-url") ?? setupConfig.apiUrl;
   const envVar = option(args, "--var") ?? "ALLOWLY_API_KEY";
   const runtimeEnv = option(args, "--runtime-env") ?? option(args, "--env-file");
@@ -767,6 +773,33 @@ function clientTimestamp(value: string): string {
     throw new Error("--client-timestamp must be a valid timestamp with a timezone");
   }
   return value;
+}
+
+async function commandObserve(subcommand: string, value: string, args: string[]): Promise<void> {
+  if (!["submit", "get"].includes(subcommand) || !value || value.startsWith("--")) {
+    throw new Error("Use observe submit <event.json> or observe get <event-id>");
+  }
+  const allowed = new Set(["--api-key", "--api-url", "--runtime-env", "--env-file", "--var"]);
+  const seen = new Set<string>();
+  for (let i = 0; i < args.length; i += 2) {
+    if (!allowed.has(args[i]) || seen.has(args[i]) || !args[i + 1] || args[i + 1].startsWith("--")) throw new Error("Unknown, repeated or missing Observe option");
+    seen.add(args[i]);
+  }
+  const config = await runtimeConfigFromArgs(args);
+  const sdk = new Allowly({ apiKey: config.accessToken, baseUrl: config.apiUrl,
+    dangerouslyAllowInsecureBaseUrl: config.apiUrl.startsWith("http://") });
+  if (subcommand === "get") {
+    console.log(JSON.stringify(await sdk.observe.get(value), null, 2));
+    return;
+  }
+  const raw = parseIntegerJson(await readFile(resolve(value), "utf8"));
+  const fields = ["event_id", "agent_id", "action", "policy_ref", "occurred_at", "reported_execution", "sources"];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || fields.some(key => !Object.hasOwn(raw, key)) || Object.keys(raw).some(key => !fields.includes(key))) throw new Error("Observe event file has missing or unknown fields");
+  const event = raw as Record<string, unknown>;
+  const result = await sdk.observe.submit({ eventId: event.event_id as string, agentId: event.agent_id as string,
+    action: event.action as string, policyRef: event.policy_ref as PolicyReference, occurredAt: event.occurred_at as string,
+    reportedExecution: event.reported_execution as ObserveReportedExecution, sources: event.sources as Record<string, string> });
+  console.log(JSON.stringify(result, null, 2));
 }
 
 async function commandCheck(args: string[]): Promise<void> {
@@ -873,6 +906,7 @@ async function main(argv: string[]): Promise<void> {
   if (command === "agent" && subcommand === "enroll") return commandAgentEnroll(action, argv.slice(3));
   if (command === "agent" && subcommand === "remove") return commandAgentRemove(action, argv.slice(3));
   if (command === "check") return commandCheck(argv.slice(1));
+  if (command === "observe") return commandObserve(subcommand, action, argv.slice(3));
   throw new Error(`Unknown command.\n\n${usage()}`);
 }
 

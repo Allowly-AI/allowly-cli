@@ -25,8 +25,8 @@ export async function readConfig(path = configPath()): Promise<CliConfig> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
-  } catch {
-    throw new Error("Allowly CLI is not configured. Run `allowly login` first.");
+  } catch (cause) {
+    throw new Error("Allowly CLI is not configured. Run `allowly login` first.", { cause });
   }
   let parsed: Partial<CliConfig> & { setupToken?: string };
   try {

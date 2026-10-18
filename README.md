@@ -46,9 +46,9 @@ Install the public npm package:
 npm install -g @allowly-ai/cli
 ```
 
-For this policy-evidence source revision, run `npm ci` in the checkout. It
+For this Observe SDK/API source revision, run `npm ci` in the checkout. It
 installs and builds the SDK from reviewed commit
-[`b930f0481aa8ca656a58efc682a366d1cea3a9fb`](https://github.com/Allowly-AI/allowly-sdk-ts/commit/b930f0481aa8ca656a58efc682a366d1cea3a9fb)
+[`a3e32440bd96ae549590c1184c55b1a3200e1afe`](https://github.com/Allowly-AI/allowly-sdk-ts/commit/a3e32440bd96ae549590c1184c55b1a3200e1afe)
 through its `prepare` hook. CLI `0.3.1`, SDK `0.8.0` and verifier `5.0.0`
 remain unchanged under the approved contract exception. Source installation
 requires GitHub and npm registry access.
