@@ -34,6 +34,6 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@allowly/sdk": "git+https://github.com/Allowly-AI/allowly-sdk-ts.git#b930f0481aa8ca656a58efc682a366d1cea3a9fb"
+    "@allowly/sdk": "git+https://github.com/Allowly-AI/allowly-sdk-ts.git#645d3ba16a9ce2f4d1fb1f27a54ad00468d54346"
   }
 }
