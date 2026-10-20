@@ -63,7 +63,7 @@ test("existing corrupt config remains an error even with an explicit runtime key
 
 test.each(["extra", "prediction", "missing_report"])("invalid %s capture never reaches the API", async kind => {
   const { directory, error } = await environment(); const invalid: Record<string, unknown> = structuredClone(event);
-  if (kind === "extra") invalid.langfuse_secret_key = "test-secret";
+  if (kind === "extra") invalid.collector_secret_key = "test-secret";
   else if (kind === "prediction") invalid.sources = { body: true };
   else delete invalid.reported_execution;
   const file = join(directory, "event.json"); await writeFile(file, JSON.stringify(invalid));
