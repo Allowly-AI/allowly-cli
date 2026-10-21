@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Add `observe submit` and `observe get` for runtime-key reporting and status
+  polling without a CLI login.
+- Use published SDK 0.9.0 for Observe and policy-evidence validation.
+
 ## 0.3.1
 
 - Reject fractional and unsafe JSON number tokens before sending policy or

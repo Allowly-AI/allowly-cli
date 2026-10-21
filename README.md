@@ -46,12 +46,8 @@ Install the public npm package:
 npm install -g @allowly-ai/cli
 ```
 
-For this Observe SDK/API source revision, run `npm ci` in the checkout. It
-installs and builds the SDK from reviewed commit
-[`645d3ba16a9ce2f4d1fb1f27a54ad00468d54346`](https://github.com/Allowly-AI/allowly-sdk-ts/commit/645d3ba16a9ce2f4d1fb1f27a54ad00468d54346)
-through its `prepare` hook. CLI `0.3.1`, SDK `0.8.0` and verifier `5.0.0`
-remain unchanged under the approved contract exception. Source installation
-requires GitHub and npm registry access.
+Observe reporting is available in CLI `0.4.0`, which installs SDK `0.9.0`
+from the npm registry.
 
 Then:
 
@@ -76,6 +72,25 @@ the control-plane API address. For example, a local login can use
 `https://localhost:8843`.
 Advanced `login --setup-token` also keeps the chosen `--app-url` and `--api-url`
 in the local config; it does not run the browser approval flow.
+
+## Report observed activity
+
+Use a runtime API key without a CLI login:
+
+```bash
+allowly observe submit event.json --runtime-env .env.local
+allowly observe get operation:1 --runtime-env .env.local
+```
+
+`event.json` contains exactly `event_id`, `agent_id`, `action`, `policy_ref`,
+`occurred_at`, `reported_execution`, and `sources`. `policy_ref` names the exact
+approved policy ID, version, and definition digest. Source values are captured
+strings. Use `sent`, `accepted`, `failed`, or `unknown` for the application's
+reported execution outcome.
+
+Submission records activity for an asynchronous policy review. It does not
+execute or block the action. Poll the event to see processing and assessment
+status; an unfinished review is not a finding of compliance.
 
 ## Optional use-case seeds
 
@@ -162,69 +177,6 @@ create new authorizations. `allowly logout` only revokes the CLI login.
 
 The dashboard also offers **Remove identity** and individual **Revoke key**
 controls under the agent's **Integrate** page.
-
-## Set up witnessed execution
-
-After `allowly login`, install the native Rust helper on the host that sends
-provider requests and pin this workspace's public witness key. Choose either:
-
-```bash
-# Download the verified precompiled helper; no Rust toolchain needed.
-allowly setup witness
-
-# Download reviewed adapter source and build it with pinned official TLSNotary.
-allowly setup witness --build-from-source
-```
-
-The source option needs Rust 1.95.0, Cargo, Git, Bash, and a native C build
-toolchain. It downloads Allowly's adapter source, then fetches unchanged
-TLSNotary libraries from the official `tlsnotary/tlsn` repository, pinned to
-`v0.1.0-alpha.15` / `47aee45b53e06648c1b2ad3689b367b8c923fdec`.
-The executable implements Allowly's protocol around those libraries; it is not
-a renamed upstream TLSNotary executable.
-
-Both automatic paths use the published experimental
-[`witness-v0.1.1` release](https://github.com/Allowly-AI/allowly-mcp/releases/tag/witness-v0.1.1).
-The CLI verifies the pinned SHA-256 digest of `SHA256SUMS`, then the selected
-archive. They never use an unverified download or silently switch install
-modes. Native release checks ran on Ubuntu 22.04 (glibc 2.35) on x64 and ARM64,
-and macOS 15 on Intel and Apple Silicon. Compatibility below these tested
-baselines is not claimed.
-
-Offline options remain available:
-
-```bash
-allowly setup witness --archive /path/to/allowly-witness-poc-0.1.1-<target>.tar.gz --sha256 <archive-sha256>
-allowly setup witness --helper /absolute/path/to/allowly-witness-poc
-```
-
-Use only a helper you built or reviewed yourself with `--helper`; this option
-does not establish its source authenticity. The archive option checks the
-expected SHA-256 digest you supply. Choose one source option per setup command.
-For the local development bridge, add `--witness-ca-cert /absolute/path/to/ca.pem`.
-The CLI copies that local CA certificate into the workspace's witness setup and
-pins its SHA-256 fingerprint. Both SDKs check the pinned certificate before
-starting the helper. This option affects only the witness socket; provider
-HTTPS continues to use normal public certificate authorities. Production
-witness URLs with publicly trusted certificates do not need this option.
-
-If an older CLI config points browser pages at the backend API, add
-`--app-url https://localhost:8843` to witness setup. This overrides only the
-browser page for that run; API addresses and saved CLI credentials are unchanged.
-
-The CLI fetches only the public key, computes its SHA-256 fingerprint locally,
-and opens the authenticated workspace page. Compare the two full fingerprints
-and enter the one shown in the browser. A mismatch stops setup. The saved
-configuration contains the workspace ID, public key path, helper path, and
-fingerprint; it contains no setup credential or private key. The key and
-configuration are stored under `ALLOWLY_CONFIG_DIR` or `~/.allowly/witness/<workspace-id>/`.
-
-Supported hosts are macOS and glibc Linux on arm64 or x64; Windows and musl
-Linux are not supported by this installer. The helper and Witness Bridge source
-both live in `allowly_mcp/witness`. Customers install one `@allowly/mcp`
-package for receipt or witnessed mode. The CLI installs only the optional
-helper, not a second MCP package. The Witness Bridge is Allowly's hosted
-witnessing socket/service; setup does not download or start that server.
 
 For an existing Auth0-bound authorization, keep the short-lived machine access token in
 `ALLOWLY_AGENT_TOKEN`, or select another environment variable with
