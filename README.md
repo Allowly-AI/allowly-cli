@@ -166,6 +166,24 @@ Use `--write-env` for local env-file output. `--env-file` is intentionally not d
 
 `allowly check` is a runtime helper. It requires a runtime API key from `--api-key`, `ALLOWLY_API_KEY`, or `--runtime-env`; it does not use the CLI setup credential. Receipt signing still happens server-side in the Allowly API.
 
+## Load hosted agent instructions
+
+```bash
+allowly agent-instructions --agent-name "Support agent" --runtime-env .env.local
+```
+
+This local source command writes the complete plain-text instructions to stdout
+for the exact configured name. It requires a runtime supporting
+`GET /v1/agent-instructions` and a runtime key from `--api-key`,
+`ALLOWLY_API_KEY`, or `--runtime-env`; it never borrows the saved login
+credential. Use `--api-url` to select your trusted runtime origin.
+
+Pass the text to your agent. In both hosted and copied modes, the agent turns
+free text into structured Check JSON using the included schema, descriptions
+and exact policy reference. Refresh after policy changes. Instructions do not
+grant permission: execute only after an `allow` from Check. Invalid responses
+and request failures exit nonzero without printing instructions.
+
 ## Remove an agent identity
 
 `allowly agent remove <exact-agent-id>` lists and revokes the agent's active

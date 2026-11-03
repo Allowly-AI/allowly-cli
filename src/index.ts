@@ -100,6 +100,7 @@ Commands:
   allowly setup witness --helper <local-rust-helper> --witness-ca-cert <local-ca.pem>
   allowly setup witness --helper <local-rust-helper> --app-url <dashboard-url>
   allowly check --authorization-id <id> --action <action> [--resource <resource>] [--client-timestamp <RFC3339>] [--runtime-env .env.local] [--agent-credential <credential.json>]
+  allowly agent-instructions --agent-name <name> [--runtime-env .env.local] [--api-url <url>]
   allowly observe submit <event.json> [--api-key <runtime-key>] [--api-url <url>]
   allowly observe get <event-id> [--api-key <runtime-key>] [--api-url <url>]
 
@@ -663,11 +664,11 @@ async function commandPoliciesApply(file: string | undefined, args: string[]): P
   await applyPolicies(config, policies);
 }
 
-function policyCommandOptions(args: string[], allowed: string[]): void {
+function policyCommandOptions(args: string[], allowed: string[], command = "policy"): void {
   const seen = new Set<string>();
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
-    if (!allowed.includes(flag) || seen.has(flag)) throw new Error(`Unknown or repeated policy option: ${flag}`);
+    if (!allowed.includes(flag) || seen.has(flag)) throw new Error(`Unknown or repeated ${command} option: ${flag}`);
     if (!args[index + 1] || args[index + 1].startsWith("--")) throw new Error(`${flag} requires a value`);
     seen.add(flag);
   }
@@ -843,6 +844,20 @@ async function commandCheck(args: string[]): Promise<void> {
   console.log(JSON.stringify(result, null, 2));
 }
 
+async function commandAgentInstructions(args: string[]): Promise<void> {
+  policyCommandOptions(args, ["--agent-name", "--api-key", "--api-url", "--runtime-env", "--env-file", "--var"], "agent-instructions");
+  const name = option(args, "--agent-name");
+  if (!name || name !== name.trim() || [...name].length > 128 || name.includes("\0")) {
+    throw new Error("--agent-name requires an exact configured name of 1 to 128 characters");
+  }
+  const config = await runtimeConfigFromArgs(args);
+  if (config.agentToken) throw new Error("name-routed instructions cannot use configured agent identity");
+  const instructions = await apiRequest<string>(config, "GET",
+    `/v1/agent-instructions?agent_name=${encodeURIComponent(name)}`, undefined,
+    30_000, { Accept: "text/plain" }, "text");
+  process.stdout.write(instructions);
+}
+
 async function commandKeysCreate(args: string[]): Promise<void> {
   const config = await readConfig();
   const envFile = option(args, "--write-env") ?? option(args, "--env-output") ?? option(args, "--env-file");
@@ -906,6 +921,7 @@ async function main(argv: string[]): Promise<void> {
   if (command === "agent" && subcommand === "enroll") return commandAgentEnroll(action, argv.slice(3));
   if (command === "agent" && subcommand === "remove") return commandAgentRemove(action, argv.slice(3));
   if (command === "check") return commandCheck(argv.slice(1));
+  if (command === "agent-instructions") return commandAgentInstructions(argv.slice(1));
   if (command === "observe") return commandObserve(subcommand, action, argv.slice(3));
   throw new Error(`Unknown command.\n\n${usage()}`);
 }
@@ -913,7 +929,7 @@ async function main(argv: string[]): Promise<void> {
 main(process.argv.slice(2)).catch((err) => {
   if (err instanceof AllowlyCliError) {
     const loginHint = err.status === 401
-      && !["check", "login", "trial"].includes(process.argv[2] ?? "")
+      && !["check", "agent-instructions", "login", "trial"].includes(process.argv[2] ?? "")
       && !err.message.includes("allowly login")
       ? " Run `allowly login`."
       : "";
