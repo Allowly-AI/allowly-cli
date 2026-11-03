@@ -6,6 +6,7 @@
   agent name using runtime credentials and the selected trusted API origin.
 - Reject invalid instruction responses and keep saved setup credentials out of
   this runtime command.
+- Use SDK 0.10.0 so policy apply preserves and validates input descriptions.
 
 ## 0.4.0
 

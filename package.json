@@ -34,6 +34,6 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@allowly/sdk": "^0.9.0"
+    "@allowly/sdk": "^0.10.0"
   }
 }
