@@ -172,7 +172,7 @@ Use `--write-env` for local env-file output. `--env-file` is intentionally not d
 allowly agent-instructions --agent-name "Support agent" --runtime-env .env.local
 ```
 
-This local source command writes the complete plain-text instructions to stdout
+CLI 0.5.0 or newer writes the complete plain-text instructions to stdout
 for the exact configured name. It requires a runtime supporting
 `GET /v1/agent-instructions` and a runtime key from `--api-key`,
 `ALLOWLY_API_KEY`, or `--runtime-env`; it never borrows the saved login
