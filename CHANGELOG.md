@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Add `agent-instructions` to fetch plain-text guidance for an exact configured
+  agent name using runtime credentials and the selected trusted API origin.
+- Reject invalid instruction responses and keep saved setup credentials out of
+  this runtime command.
+- Use SDK 0.10.0 so policy apply preserves and validates input descriptions.
+
 ## 0.4.0
 
 - Add `observe submit` and `observe get` for runtime-key reporting and status

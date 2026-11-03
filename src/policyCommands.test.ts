@@ -34,6 +34,22 @@ test("apply only skips the same retained definition, not a different policy with
   fetch.mockResolvedValue(new Response(JSON.stringify({ items: [policyResponse()], has_more: false, next_cursor: null })));
   await expect(applyPolicies(config, [policy])).rejects.toThrow("exact previous_policy_ref");
 });
+test("apply retains input descriptions through the SDK's public create path", async () => {
+  const policy = getSetupTemplate("email-agent").policies[0];
+  const entry = policy.actions[0];
+  entry.input_descriptions = { description: "Read the configured mailbox", resource: "Mailbox ID",
+    fields: Object.fromEntries(Object.keys(entry.policy.fields).map(name => [name, "Recorded value"])) };
+  const definition = { profile: policy.profile, agent_id: policy.agent_id,
+    actions: policy.actions, default_expiry_days: policy.default_expiry_days };
+  const saved = policyResponse();
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ items: [], has_more: false, next_cursor: null })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ ...saved, definition,
+      policy_ref: { ...saved.policy_ref, definition_sha256: hashSealValue(definition) } }), { status: 201 }));
+  vi.stubGlobal("fetch", fetch); vi.spyOn(console, "log").mockImplementation(() => {});
+  await applyPolicies(config, [policy]);
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual(policy);
+  expect(fetch.mock.calls[1][1].headers["X-Allowly-Agent-Token"]).toBeUndefined();
+});
 test("publish sends its exact previous edition and stable key without a nested definition wrapper", async () => {
   const policy = getSetupTemplate("email-agent").policies[0];
   policy.previous_policy_ref = policyResponse().policy_ref;
